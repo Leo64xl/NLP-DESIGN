@@ -1,0 +1,302 @@
+.email-error-bg {
+  min-height: 100vh;
+  background: linear-gradient(135deg, 
+    #1e1b4b 0%, 
+    #3730a3 20%, 
+    #5b21b6 40%, 
+    #7c3aed 60%, 
+    #a855f7 80%, 
+    #3b82f6 100%);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.email-error-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 60%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.email-error-container {
+  background: rgba(45, 45, 65, 0.95);
+  border-radius: 20px;
+  box-shadow: 
+    0 15px 40px rgba(0, 0, 0, 0.3),
+    0 0 60px rgba(168, 85, 247, 0.1);
+  width: 100%;
+  max-width: 500px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.email-error-content {
+  padding: 2.5rem 2rem;
+  color: #fff;
+  text-align: center;
+}
+
+.email-error-brand-section {
+  margin-bottom: 2rem;
+}
+
+.email-error-brand-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+}
+
+.email-error-brand-subtitle {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.email-error-status-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.email-error-icon {
+  margin-bottom: 1.5rem;
+  animation: emailErrorPulse 2s ease-in-out infinite;
+}
+
+.email-error-status-section.success .email-error-icon {
+  color: #10b981;
+}
+
+.email-error-status-section.warning .email-error-icon {
+  color: #f59e0b;
+}
+
+.email-error-status-section.error .email-error-icon {
+  color: #ef4444;
+}
+
+.email-error-status-section.neutral .email-error-icon {
+  color: #6b7280;
+}
+
+@keyframes emailErrorPulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+.email-error-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 1rem;
+}
+
+.email-error-status-section.success .email-error-title {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.email-error-status-section.warning .email-error-title {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.email-error-status-section.error .email-error-title {
+  background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.email-error-status-section.neutral .email-error-title {
+  background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.email-error-message {
+  color: #cbd5e1;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  max-width: 400px;
+}
+
+.email-error-actions {
+  margin-bottom: 2rem;
+}
+
+.email-error-button {
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  color: #fff;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.email-error-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(168, 85, 247, 0.4);
+}
+
+.email-error-status-section.success .email-error-button {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+}
+
+.email-error-status-section.success .email-error-button:hover {
+  box-shadow: 0 6px 25px rgba(16, 185, 129, 0.4);
+}
+
+.email-error-status-section.warning .email-error-button {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3);
+}
+
+.email-error-status-section.warning .email-error-button:hover {
+  box-shadow: 0 6px 25px rgba(245, 158, 11, 0.4);
+}
+
+.email-error-status-section.error .email-error-button {
+  background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
+}
+
+.email-error-status-section.error .email-error-button:hover {
+  box-shadow: 0 6px 25px rgba(239, 68, 68, 0.4);
+}
+
+.email-error-help {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1.5rem;
+}
+
+.email-error-help-content {
+  text-align: center;
+}
+
+.email-error-help-title {
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+.email-error-help-text {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.email-error-contact {
+  color: #a855f7;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.email-error-contact:hover {
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.3);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .email-error-container {
+    max-width: 400px;
+  }
+  
+  .email-error-content {
+    padding: 2rem 1.5rem;
+  }
+  
+  .email-error-brand-title {
+    font-size: 2rem;
+  }
+  
+  .email-error-title {
+    font-size: 1.6rem;
+  }
+  
+  .email-error-icon svg {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+@media (max-width: 480px) {
+  .email-error-bg {
+    padding: 0.5rem;
+  }
+  
+  .email-error-content {
+    padding: 1.5rem 1rem;
+  }
+  
+  .email-error-brand-title {
+    font-size: 1.8rem;
+  }
+  
+  .email-error-title {
+    font-size: 1.4rem;
+  }
+  
+  .email-error-button {
+    padding: 0.9rem 1.5rem;
+    font-size: 0.95rem;
+    width: 100%;
+  }
+  
+  .email-error-icon svg {
+    width: 40px;
+    height: 40px;
+  }
+}

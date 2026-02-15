@@ -1,0 +1,310 @@
+.register-bg {
+  min-height: 100vh;
+  background: linear-gradient(135deg, 
+    #1e1b4b 0%, 
+    #3730a3 20%, 
+    #5b21b6 40%, 
+    #7c3aed 60%, 
+    #a855f7 80%, 
+    #3b82f6 100%);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.register-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 60%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.register-container {
+  background: rgba(45, 45, 65, 0.95);
+  border-radius: 20px;
+  box-shadow: 
+    0 15px 40px rgba(0, 0, 0, 0.3),
+    0 0 60px rgba(168, 85, 247, 0.1);
+  width: 100%;
+  max-width: 500px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.register-content {
+  padding: 2.5rem 2rem;
+  color: #fff;
+}
+
+.register-brand-section {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.register-brand-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+}
+
+.register-brand-subtitle {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.register-form-title {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.register-form-title h2 {
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.register-form {
+  width: 100%;
+}
+
+.register-input-group {
+  margin-bottom: 1.2rem;
+}
+
+.register-label {
+  display: block;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.register-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.register-input-wrapper:focus-within {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+.register-input-icon {
+  padding: 0 1rem;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.register-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 0.9rem 1rem 0.9rem 0;
+  color: #374151;
+  font-size: 1rem;
+  outline: none;
+}
+
+.register-input::placeholder {
+  color: #9ca3af;
+}
+
+.register-eye-button {
+  background: none;
+  border: none;
+  color: #6b7280;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.2s ease;
+}
+
+.register-eye-button:hover {
+  color: #a855f7;
+}
+
+.register-error-message {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.register-button {
+  width: 100%;
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  color: #fff;
+  border: none;
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.3);
+}
+
+.register-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(168, 85, 247, 0.4);
+}
+
+.register-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.register-button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.register-spinner {
+  animation: registerSpin 1s linear infinite;
+}
+
+@keyframes registerSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.register-terms-section {
+  margin-bottom: 1.5rem;
+}
+
+.register-terms-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.register-terms-checkbox {
+  display: none;
+}
+
+.register-terms-checkmark {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #cbd5e1;
+  border-radius: 4px;
+  background: transparent;
+  transition: all 0.3s ease;
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.register-terms-checkbox:checked + .register-terms-checkmark {
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  border-color: #a855f7;
+}
+
+.register-terms-checkbox:checked + .register-terms-checkmark::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.register-terms-text {
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+
+.register-terms-link {
+  color: #a855f7;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.register-terms-link:hover {
+  color: #c084fc;
+  text-decoration: underline;
+}
+
+.register-login-section {
+  text-align: center;
+}
+
+.register-login-text {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.register-login-link {
+  color: #a855f7;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.register-login-link:hover {
+  color: #c084fc;
+}
+
+@media (max-width: 768px) {
+  .register-container {
+    max-width: 400px;
+  }
+  
+  .register-content {
+    padding: 2rem 1.5rem;
+  }
+  
+  .register-brand-title {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .register-bg {
+    padding: 0.5rem;
+  }
+  
+  .register-content {
+    padding: 1.5rem 1rem;
+  }
+  
+  .register-brand-title {
+    font-size: 1.8rem;
+  }
+}

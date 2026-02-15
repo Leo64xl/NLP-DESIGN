@@ -1,0 +1,440 @@
+.resend-bg {
+  min-height: 100vh;
+  background: linear-gradient(135deg, 
+    #1e1b4b 0%, 
+    #3730a3 20%, 
+    #5b21b6 40%, 
+    #7c3aed 60%, 
+    #a855f7 80%, 
+    #3b82f6 100%);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.resend-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 60%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.resend-container {
+  background: rgba(45, 45, 65, 0.95);
+  border-radius: 20px;
+  box-shadow: 
+    0 15px 40px rgba(0, 0, 0, 0.3),
+    0 0 60px rgba(168, 85, 247, 0.1);
+  width: 100%;
+  max-width: 500px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.resend-content {
+  padding: 2.5rem 2rem;
+  color: #fff;
+}
+
+.resend-brand-section {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.resend-brand-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+}
+
+.resend-brand-subtitle {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.resend-form-section {
+  text-align: center;
+}
+
+.resend-icon-section {
+  margin-bottom: 1.5rem;
+}
+
+.resend-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  border-radius: 50%;
+  color: #fff;
+  margin: 0 auto;
+  animation: resendIconPulse 2s ease-in-out infinite;
+}
+
+@keyframes resendIconPulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+  }
+  50% { 
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.5);
+  }
+}
+
+.resend-form-title {
+  margin-bottom: 2rem;
+}
+
+.resend-form-title h2 {
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+.resend-subtitle {
+  color: #cbd5e1;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.resend-form {
+  text-align: left;
+}
+
+.resend-input-group {
+  margin-bottom: 1.2rem;
+}
+
+.resend-label {
+  display: block;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.resend-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.resend-input-wrapper:focus-within {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+.resend-input-icon {
+  padding: 0 1rem;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.resend-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 0.9rem 1rem 0.9rem 0;
+  color: #374151;
+  font-size: 1rem;
+  outline: none;
+}
+
+.resend-input::placeholder {
+  color: #9ca3af;
+}
+
+.resend-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.resend-error-message {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.resend-button {
+  width: 100%;
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  color: #fff;
+  border: none;
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.3);
+}
+
+.resend-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(168, 85, 247, 0.4);
+}
+
+.resend-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.resend-button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.resend-spinner {
+  animation: resendSpin 1s linear infinite;
+}
+
+@keyframes resendSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.resend-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.resend-back-link,
+.resend-register-link {
+  color: #a855f7;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.resend-back-link:hover,
+.resend-register-link:hover {
+  color: #c084fc;
+}
+
+.resend-verified-notice {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 2rem 1.5rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.resend-verified-icon {
+  color: #3b82f6;
+  margin-bottom: 1rem;
+}
+
+.resend-verified-title {
+  color: #3b82f6;
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.resend-verified-text {
+  color: #cbd5e1;
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.resend-login-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+  color: #fff;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: inline-block;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+  margin-right: 1rem;
+}
+
+.resend-login-button:hover {
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.resend-verified-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.resend-try-another-button {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 0.8rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.resend-try-another-button:hover {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.5);
+  transform: translateY(-1px);
+}
+
+.resend-help-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1.5rem;
+  text-align: center;
+}
+
+.resend-help-text {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.resend-help-link {
+  color: #a855f7;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.resend-help-link:hover {
+  color: #c084fc;
+  text-decoration: underline;
+}
+
+/* Estilos personalizados para SweetAlert */
+.resend-success-popup {
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2) !important;
+}
+
+.resend-success-title-custom {
+  color: #10b981 !important;
+  font-weight: 700 !important;
+  font-size: 1.5rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.resend-success-confirm-btn {
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 0.8rem 1.5rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3) !important;
+  transition: all 0.3s ease !important;
+}
+
+.resend-success-confirm-btn:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4) !important;
+}
+
+.resend-success-cancel-btn {
+  border-radius: 8px !important;
+  padding: 0.8rem 1.5rem !important;
+  font-weight: 500 !important;
+}
+
+@media (max-width: 768px) {
+  .resend-container {
+    max-width: 400px;
+  }
+  
+  .resend-content {
+    padding: 2rem 1.5rem;
+  }
+  
+  .resend-brand-title {
+    font-size: 2rem;
+  }
+  
+  .resend-actions {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  
+  .resend-verified-actions {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  
+  .resend-login-button {
+    margin-right: 0;
+    margin-bottom: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .resend-bg {
+    padding: 0.5rem;
+  }
+  
+  .resend-content {
+    padding: 1.5rem 1rem;
+  }
+  
+  .resend-brand-title {
+    font-size: 1.8rem;
+  }
+  
+  .resend-icon {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .resend-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+}

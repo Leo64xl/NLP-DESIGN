@@ -1,0 +1,621 @@
+/* ===== DISEÑO PROFESIONAL NAVBAR 2025 ===== */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 72px;
+  background: linear-gradient(135deg, 
+    rgba(15, 23, 42, 0.95) 0%, 
+    rgba(30, 41, 59, 0.95) 50%, 
+    rgba(51, 65, 85, 0.95) 100%
+  );
+  backdrop-filter: blur(16px) saturate(180%);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  z-index: 1000;
+  box-shadow: 
+    0 4px 32px rgba(0, 0, 0, 0.12),
+    0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.navbar:hover {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 
+    0 6px 40px rgba(0, 0, 0, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.navbar-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* ===== LOGO Y MARCA PROFESIONAL ===== */
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #f8fafc;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+  position: relative;
+  cursor: pointer;
+}
+
+.navbar-brand svg {
+  width: 28px;
+  height: 28px;
+  color: #e2e8f0;
+  padding: 6px;
+  transition: all 0.3s ease;
+}
+
+.navbar-brand:hover svg {
+  transform: scale(1.05);
+  color: #f8fafc;
+}
+
+.navbar-title {
+  background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  position: relative;
+}
+
+/* ===== NAVEGACIÓN CENTRAL PROFESIONAL ===== */
+.navbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(248, 250, 252, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  color: #e2e8f0;
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.nav-item:hover::before {
+  left: 100%;
+}
+
+.nav-item:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: 
+    0 8px 25px rgba(59, 130, 246, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #ffffff;
+  box-shadow: 
+    0 4px 20px rgba(59, 130, 246, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.nav-item svg {
+  width: 18px;
+  height: 18px;
+  transition: all 0.3s ease;
+}
+
+.nav-item:hover svg,
+.nav-item.active svg {
+  transform: scale(1.1);
+  filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3));
+}
+
+/* ===== ACCIONES DE USUARIO PROFESIONALES ===== */
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: rgba(248, 250, 252, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  backdrop-filter: blur(8px);
+}
+
+/* Estilos base que solo se aplican a user-btn */
+.action-btn:not(.settings-btn):not(.notification-btn):hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #f8fafc;
+  transform: translateY(-2px);
+  box-shadow: 
+    0 8px 25px rgba(59, 130, 246, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.action-btn:not(.settings-btn):not(.notification-btn).active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #ffffff;
+  box-shadow: 
+    0 4px 20px rgba(59, 130, 246, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.action-btn svg {
+  width: 20px;
+  height: 20px;
+  transition: all 0.3s ease;
+}
+
+.action-btn:not(.settings-btn):not(.notification-btn):hover svg,
+.action-btn:not(.settings-btn):not(.notification-btn).active svg {
+  transform: scale(1.1);
+  filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3));
+}
+
+/* ===== BOTÓN DE CONFIGURACIÓN ===== */
+.settings-btn {
+  background: none !important;
+  border: none !important;
+  width: 48px;
+  height: 48px;
+  border-radius: 0;
+  backdrop-filter: none;
+}
+
+.settings-btn:hover {
+  background: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.settings-btn.active {
+  background: rgba(248, 250, 252, 0.15) !important;
+  border-radius: 8px !important;
+  color: #ffffff;
+}
+
+.settings-btn svg {
+  transition: all 0.2s ease;
+}
+
+.settings-btn:active svg {
+  transform: scale(0.9);
+}
+
+.settings-btn.active svg {
+  transform: scale(1.05);
+  color: #f8fafc;
+}
+
+/* ===== BOTÓN DE NOTIFICACIONES ===== */
+.notification-btn {
+  position: relative;
+  background: none !important;
+  border: none !important;
+  width: 48px;
+  height: 48px;
+  border-radius: 0;
+  backdrop-filter: none;
+  z-index: 1;
+  overflow: visible;
+}
+
+.notification-btn:hover {
+  background: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.notification-btn.active {
+  background: rgba(248, 250, 252, 0.15) !important;
+  border-radius: 8px !important;
+  color: #ffffff;
+  z-index: 1;
+}
+
+.notification-btn svg {
+  transition: all 0.2s ease;
+}
+
+.notification-btn:active svg {
+  transform: scale(0.9);
+}
+
+.notification-btn.active svg {
+  transform: scale(1.05);
+  color: #f8fafc;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(15, 23, 42, 0.95);
+  box-shadow: 
+    0 4px 12px rgba(239, 68, 68, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.notification-badge.pulse {
+  animation: pulse-notification 2s infinite;
+}
+
+@keyframes pulse-notification {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+  }
+}
+
+/* ===== BOTÓN DE USUARIO ===== */
+.user-btn.circular {
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.15));
+  border: 2px solid rgba(139, 92, 246, 0.3);
+}
+
+.user-btn:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(59, 130, 246, 0.25));
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 
+    0 8px 25px rgba(139, 92, 246, 0.3),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.user-btn.active {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(59, 130, 246, 0.3));
+  border-color: rgba(139, 92, 246, 0.6);
+}
+
+.user-btn:hover svg,
+.user-btn.active svg {
+  filter: drop-shadow(0 2px 4px rgba(139, 92, 246, 0.3));
+}
+
+/* ===== PANELES DESPLEGABLES PROFESIONALES ===== */
+.navbar-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, 
+    rgba(15, 23, 42, 0.98) 0%, 
+    rgba(30, 41, 59, 0.98) 100%
+  );
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-top: none;
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.2),
+    0 8px 25px rgba(0, 0, 0, 0.1);
+  z-index: 999;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.templates-panel {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ===== DROPDOWN PERSONALIZADO ===== */
+.navbar-dropdown {
+  position: relative;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+  .navbar-content {
+    padding: 0 16px;
+  }
+  
+  .navbar-brand {
+    gap: 12px;
+    font-size: 18px;
+  }
+  
+  .navbar-brand svg {
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+  }
+  
+  .nav-item {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+  
+  .nav-item svg {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .action-btn {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .action-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .navbar-actions {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .navbar {
+    height: 64px;
+  }
+  
+  .navbar-content {
+    padding: 0 12px;
+  }
+  
+  .navbar-brand {
+    font-size: 16px;
+  }
+  
+  .nav-item span {
+    display: none;
+  }
+  
+  .nav-item {
+    padding: 10px;
+    min-width: auto;
+  }
+}
+
+/* ===== EFECTOS ADICIONALES ===== */
+.navbar-brand,
+.nav-item,
+.action-btn {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Smooth scroll cuando se abren paneles */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Animación suave para todos los elementos interactivos */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mejora de contraste y accesibilidad */
+.navbar *:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}
+
+/* Estados de carga */
+.navbar.loading {
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.navbar.loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  animation: loading-bar 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ===== GLASS MORPHISM EFFECTS ===== */
+.navbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ===== MICRO INTERACCIONES ===== */
+.nav-item,
+.action-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-item::after,
+.action-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.3s, height 0.3s;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.nav-item:active::after,
+.action-btn:active::after {
+  width: 100px;
+  height: 100px;
+}
+
+/* ===== MEJORAS DE TIPOGRAFÍA ===== */
+.navbar-title {
+  font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.nav-item span {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ===== EFECTOS DE PARTÍCULAS SUTILES ===== */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* ===== ESQUEMA DE COLORES AVANZADO ===== */
+:root {
+  --navbar-primary: rgba(15, 23, 42, 0.95);
+  --navbar-secondary: rgba(30, 41, 59, 0.95);
+  --navbar-tertiary: rgba(51, 65, 85, 0.95);
+  --navbar-accent: #3b82f6;
+  --navbar-accent-secondary: #8b5cf6;
+  --navbar-success: #10b981;
+  --navbar-warning: #f59e0b;
+  --navbar-text: #f8fafc;
+  --navbar-text-secondary: #e2e8f0;
+  --navbar-border: rgba(148, 163, 184, 0.15);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --navbar-primary: rgba(15, 23, 42, 0.98);
+    --navbar-secondary: rgba(30, 41, 59, 0.98);
+    --navbar-tertiary: rgba(51, 65, 85, 0.98);
+  }
+}
+
+/* ===== OPTIMIZACIONES DE RENDIMIENTO ===== */
+.navbar,
+.navbar-brand,
+.nav-item,
+.action-btn {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* ===== ESTADOS DE FOCUS AVANZADOS ===== */
+.nav-item:focus-visible,
+.action-btn:focus-visible {
+  outline: none;
+  box-shadow: 
+    0 0 0 2px rgba(59, 130, 246, 0.5),
+    0 8px 25px rgba(59, 130, 246, 0.2);
+}
+
+/* ===== ANIMACIONES DE CARGA ===== */
+.navbar.loading .navbar-brand svg {
+  animation: loading-spin 1s linear infinite;
+}
+
+@keyframes loading-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
