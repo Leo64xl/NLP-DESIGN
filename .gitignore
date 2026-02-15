@@ -24,6 +24,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# Docker
+DOCKER_README.md
+
 # Uploads (generated files)
 backend/uploads/designs/*/
 !backend/uploads/designs/.gitkeep
