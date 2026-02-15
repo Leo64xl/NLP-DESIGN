@@ -258,8 +258,11 @@ export const createDesign = async (req: Request, res: Response) => {
 
     console.log("🚀 Generando plan con IA...");
 
-    // Generar plan usando Groq
-    const plan = await MainAIService.generatePlan(prompt);
+    // Generar plan usando OpenAI - Ahora devuelve plan + structuralData + files
+    const generationResult = await MainAIService.generatePlan(prompt);
+    const plan = generationResult.plan;
+    const structuralData = generationResult.structuralData;
+    const generatedFiles = generationResult.files;
 
     console.log("✅ Plan generado exitosamente");
 
@@ -291,6 +294,7 @@ export const createDesign = async (req: Request, res: Response) => {
         formatHistory: [],
         totalMessages: 0,
         planData: plan,
+        structuralData: structuralData, // 🔥 Guardar structuralData para uso posterior
       },
     });
 
@@ -312,12 +316,13 @@ export const createDesign = async (req: Request, res: Response) => {
 
 🚀 Estoy generando los archivos técnicos. Los tendrás listos en unos minutos.`,
       status: "completed",
-      metadata: {
+      metadata: JSON.parse(JSON.stringify({
         isSystemMessage: true,
         messageType: "design_created",
         isFirstMessage: true,
         timestamp: new Date().toISOString(),
-      },
+        structuralData: structuralData, // 🔥 Incluir structuralData en metadata del mensaje para visualización
+      })),
     });
 
     console.log("💬 Mensaje inicial creado");
@@ -329,7 +334,7 @@ export const createDesign = async (req: Request, res: Response) => {
 
     console.log("🗂️ Generación de archivos automática deshabilitada - Solo NLP SVG/STL");
 
-    // 🔥 ESTRUCTURA CORRECTA PARA EL FRONTEND
+    // 🔥 ESTRUCTURA CORRECTA PARA EL FRONTEND CON STRUCTURALDATA
     res.status(201).json({
       success: true,
       message: "Diseño creado exitosamente",
@@ -347,13 +352,16 @@ export const createDesign = async (req: Request, res: Response) => {
           content: initialMessage.content,
           status: initialMessage.status,
           createdAt: initialMessage.createdAt,
+          metadata: initialMessage.metadata, // 🔥 Incluir metadata con structuralData
         },
         typeInfo: {
           type: design.type,
           label: design.type.toUpperCase(),
           features: getExpectedOutputs(design.type),
         },
-        plan: plan, // Incluir el plan generado
+        plan: plan,
+        structuralData: structuralData, // 🔥 ENVIAR STRUCTURALDATA AL FRONTEND para visualización instantánea
+        files: generatedFiles, // 🔥 Información de archivos generados (SVG, STL)
       },
     });
   } catch (error) {
@@ -1025,6 +1033,7 @@ export const getDesignMessages = async (req: Request, res: Response) => {
             content: message.content,
             status: message.status,
             createdAt: message.createdAt,
+            metadata: message.metadata, // 🔥 INCLUIR METADATA CON STRUCTURALDATA
           })) || [],
       },
       message: "Mensajes obtenidos exitosamente",

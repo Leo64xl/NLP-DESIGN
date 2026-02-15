@@ -9,7 +9,7 @@ export class MainAIService {
   /**
    * Genera un plan arquitectónico usando OpenAI
    */
-  static async generatePlan(prompt: ArchitecturalPrompt): Promise<ArchitecturalPlan> {
+  static async generatePlan(prompt: ArchitecturalPrompt): Promise<{plan: ArchitecturalPlan, structuralData: any, files: {svg: string, stl: string}}> {
     console.log('🚀 Iniciando generación de plan arquitectónico con OpenAI...');
     
     try {
@@ -38,7 +38,13 @@ export class MainAIService {
       const architecturalPlan = this.convertOpenAIToArchitecturalPlan(result, prompt);
       
       console.log('✅ Plan generado exitosamente con OpenAI');
-      return architecturalPlan;
+      
+      // Devolver plan Y structuralData completo para visualización instantánea
+      return {
+        plan: architecturalPlan,
+        structuralData: result.structuralData,
+        files: result.files
+      };
       
     } catch (error) {
       console.error('❌ Error en generación:', error);

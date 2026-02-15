@@ -264,17 +264,18 @@ export const sendArchitecturalMessage = async (req: Request, res: Response) => {
                 // Actualizar estado del diseño
                 await design.update({ status: 'completed' });
 
-                // Crear mensaje de éxito
+                // Crear mensaje de éxito CON structuralData para visualización instantánea
                 await Message.create({
                     uuid: generateUUID(),
                     designId: designUuid,
                     role: 'assistant',
-                    content: `🎉 ¡Archivos generados exitosamente con OpenAI! Se han creado ${createdFiles.length} archivos incluyendo: ${createdFiles.map((f: any) => f.fileType.toUpperCase()).join(', ')}.`,
+                    content: `🎉 ¡Diseño generado exitosamente! Puedes visualizarlo abajo. Se crearon ${createdFiles.length} archivos: ${createdFiles.map((f: any) => f.fileType.toUpperCase()).join(', ')}.`,
                     status: 'completed',
                     metadata: {
                         timestamp: new Date().toISOString(),
                         aiModel: 'openai-gpt-4o-mini',
                         generationMethod: 'openai-nlp',
+                        structuralData: nlpResult.structuralData, // 🔥 ESTO ES LA CLAVE
                         files: createdFiles.map(f => ({
                             uuid: f.uuid,
                             filename: f.filename,
@@ -551,7 +552,7 @@ export const generateNLP2D3DFiles = async (req: Request, res: Response) => {
 
             console.log('🎯 Preparando respuesta final...');
             
-            // Respuesta exitosa
+            // Respuesta exitosa CON structuralData para renderizado instantáneo
             const responseStart = Date.now();
             res.status(200).json({
                 success: true,
@@ -559,6 +560,7 @@ export const generateNLP2D3DFiles = async (req: Request, res: Response) => {
                 data: {
                     userMessage,
                     aiMessage,
+                    structuralData: nlpResult.structuralData, // 🔥 DATOS PARA VISUALIZACIÓN INSTANTÁNEA
                     files: createdFiles.map(file => ({
                         uuid: file.uuid,
                         filename: file.filename,

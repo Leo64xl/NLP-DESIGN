@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "../../../../../contexts/LanguageContext";
 import { ArchitecturalValidator } from "../../../../../utils/architecturalValidator";
+import ModelViewer from "../tools/model-viewer/ModelViewer";
 import "./Chat.css";
 
 const generateUUID = (): string => {
@@ -31,6 +32,42 @@ interface Message {
   content: string;
   status: "completed" | "processing" | "error";
   createdAt: string;
+  metadata?: {
+    structuralData?: {
+      metadata: {
+        title: string;
+        description: string;
+        totalArea: number;
+        dimensions: { width: number; length: number; height?: number };
+        style: string;
+        generatedAt: string;
+      };
+      rooms: Array<{
+        name: string;
+        type: string;
+        area: number;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        doors: Array<{ position: string; width: number }>;
+        windows: Array<{ position: string; width: number; height: number }>;
+        features: string[];
+      }>;
+      walls: Array<{
+        start: [number, number];
+        end: [number, number];
+        thickness: number;
+        material: string;
+      }>;
+      connections: Array<{
+        from: string;
+        to: string;
+        type: 'door' | 'opening' | 'window';
+        width: number;
+      }>;
+    };
+    files?: any[];
+    [key: string]: any;
+  };
 }
 
 interface DesignData {
@@ -125,6 +162,9 @@ const Chat: React.FC = () => {
   const [designData, setDesignData] = useState<DesignData | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [availableTypes, setAvailableTypes] = useState<DesignType[]>([]);
+  const [is3DMode, setIs3DMode] = useState(true); // 🔥 Estado para modo de visualización
+  const [isRenderModalOpen, setIsRenderModalOpen] = useState(false);
+  const [renderModalData, setRenderModalData] = useState<any | null>(null);
   
   // 🎨 NUEVO: Estado para el configurador visual
   const [showDesignWizard, setShowDesignWizard] = useState(false);
@@ -496,14 +536,34 @@ const Chat: React.FC = () => {
         const backendMessages = response.data.data.messages;
         console.log(`📥 Cargando ${backendMessages.length} mensajes del backend para diseño: ${designUuid}`);
         
+        // 🔍 DIAGNÓSTICO: Ver qué mensajes tienen structuralData
+        backendMessages.forEach((msg, index) => {
+          const metadataKeys = msg.metadata ? Object.keys(msg.metadata) : [];
+          console.log(`📋 Mensaje ${index + 1}:`, {
+            role: msg.role,
+            hasMetadata: !!msg.metadata,
+            hasStructuralData: !!msg.metadata?.structuralData,
+            metadataKeys: metadataKeys,
+            first10Keys: metadataKeys.slice(0, 10),
+            hasRooms: !!msg.metadata?.rooms,
+            hasWalls: !!msg.metadata?.walls,
+          });
+          
+          // Imprimir first10Keys directamente
+          console.log(`🔑 First 10 keys:`, metadataKeys.slice(0, 10));
+          console.log(`🏠 hasRooms:`, !!msg.metadata?.rooms);
+          console.log(`🧱 hasWalls:`, !!msg.metadata?.walls);
+        });
+        
         // CRÍTICO: Solo cargar si no hay mensajes previos, sino combinar
         setMessages((currentMessages) => {
           if (currentMessages.length === 0) {
             // Si no hay mensajes actuales, cargar todos del backend
             console.log("🆕 Cargando mensajes desde cero");
-            return backendMessages.sort((a, b) => 
+            const sortedMessages = backendMessages.sort((a, b) =>
               new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
             );
+            return ensureRenderMessage(sortedMessages);
           } else {
             // Si ya hay mensajes, combinar sin duplicados
             console.log("🔄 Combinando mensajes existentes con backend");
@@ -516,9 +576,10 @@ const Chat: React.FC = () => {
             backendMessages.forEach(msg => allMessagesMap.set(msg.uuid, msg));
             
             const combinedMessages = Array.from(allMessagesMap.values());
-            return combinedMessages.sort((a, b) => 
+            const sortedMessages = combinedMessages.sort((a, b) =>
               new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
             );
+            return ensureRenderMessage(sortedMessages);
           }
         });
       }
@@ -562,7 +623,39 @@ const Chat: React.FC = () => {
     }
   };
 
-  // 💬 ENVIAR MENSAJE DIRECTO - CON VALIDACIÓN ARQUITECTÓNICA
+  // � GUARDAR MENSAJES EN EL BACKEND
+  const saveMessagesToBackend = async (designUuid: string, messages: Message[]) => {
+    try {
+      // Filtrar mensajes de acción de render (se regeneran dinámicamente)
+      // Y mensajes de bienvenida (no son parte de la conversación del diseño)
+      const messagesToSave = messages.filter(msg => {
+        // Excluir mensajes de render action
+        if (msg.metadata?.renderAction === "open_render") return false;
+        
+        // Excluir mensaje de bienvenida
+        if (msg.role === "assistant" && msg.content.includes("👋")) return false;
+        
+        return true;
+      });
+
+      if (messagesToSave.length === 0) return;
+
+      console.log(`💾 Guardando ${messagesToSave.length} mensajes en backend para diseño ${designUuid}`);
+
+      await axios.post(
+        `http://localhost:5000/designs/${designUuid}/messages/bulk`,
+        { messages: messagesToSave },
+        { withCredentials: true }
+      );
+
+      console.log("✅ Mensajes guardados exitosamente");
+    } catch (error) {
+      console.error("❌ Error guardando mensajes:", error);
+      // No lanzar error, solo loguear
+    }
+  };
+
+  // �💬 ENVIAR MENSAJE DIRECTO - CON VALIDACIÓN ARQUITECTÓNICA
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isGenerating) return;
 
@@ -641,7 +734,7 @@ const Chat: React.FC = () => {
             promptData,
             {
               withCredentials: true,
-              timeout: 30000,
+              timeout: 1200000,
             }
           );
 
@@ -660,21 +753,65 @@ const Chat: React.FC = () => {
             navigate(`/design/${targetDesignId}`, { replace: true });
             setHasStarted(true);
 
-            // Actualizar estado del diseño con solo 2 archivos
-            setDesignData({
-              uuid: targetDesignId,
-              title: designData.title,
-              type: designData.type,
-              status: "generating",
-              files: [
-                { type: "svg", status: "generating", progress: 0 },
-                { type: "stl", status: "generating", progress: 0 }
-              ],
-            });
-
             // Agregar mensaje inicial del backend si existe, sino crear uno
             if (firstMessage) {
-              setMessages((prev) => [...prev, firstMessage]);
+              const hasStructuralData = !!firstMessage.metadata?.structuralData;
+              const normalizedFirstMessage: Message = hasStructuralData
+                ? {
+                    ...firstMessage,
+                    metadata: {
+                      ...firstMessage.metadata,
+                      renderMode: "none",
+                    },
+                  }
+                : firstMessage;
+
+              setMessages((prev) => {
+                const nextMessages = [...prev, normalizedFirstMessage];
+                if (hasStructuralData) {
+                  nextMessages.push(
+                    buildRenderMessage(
+                      firstMessage.metadata?.structuralData,
+                      normalizedFirstMessage.createdAt
+                    )
+                  );
+                }
+                
+                // 🔥 GUARDAR TODOS LOS MENSAJES EN EL BACKEND
+                saveMessagesToBackend(designData.uuid, nextMessages);
+                
+                return nextMessages;
+              });
+
+              if (hasStructuralData) {
+                // Mantener archivos como pendientes, sin monitoreo por ahora
+                setDesignData({
+                  uuid: targetDesignId,
+                  title: designData.title,
+                  type: designData.type,
+                  status: "generating",
+                  files: [
+                    { type: "svg", status: "generating", progress: 0 },
+                    { type: "stl", status: "generating", progress: 0 }
+                  ],
+                });
+                setIsGenerating(false);
+              } else {
+                // Sin structuralData, usar flujo tradicional de archivos
+                setDesignData({
+                  uuid: targetDesignId,
+                  title: designData.title,
+                  type: designData.type,
+                  status: "generating",
+                  files: [
+                    { type: "svg", status: "generating", progress: 0 },
+                    { type: "stl", status: "generating", progress: 0 }
+                  ],
+                });
+                // 🚀 INICIAR MONITOREO DE ARCHIVOS
+                console.log("🔍 Iniciando monitoreo de archivos para:", targetDesignId);
+                startProgressMonitoring(targetDesignId);
+              }
             } else {
               const confirmationMessage: Message = {
                 uuid: generateUUID(),
@@ -684,11 +821,21 @@ const Chat: React.FC = () => {
                 createdAt: new Date().toISOString(),
               };
               setMessages((prev) => [...prev, confirmationMessage]);
+              
+              // Caso fallback: no hay structuralData, esperar archivos
+              setDesignData({
+                uuid: targetDesignId,
+                title: designData.title,
+                type: designData.type,
+                status: "generating",
+                files: [
+                  { type: "svg", status: "generating", progress: 0 },
+                  { type: "stl", status: "generating", progress: 0 }
+                ],
+              });
+              console.log("🔍 Iniciando monitoreo de archivos (fallback)");
+              startProgressMonitoring(targetDesignId);
             }
-
-            // 🚀 INICIAR MONITOREO INMEDIATAMENTE
-            console.log("🔍 Iniciando monitoreo inmediato para:", targetDesignId);
-            startProgressMonitoring(targetDesignId);
 
           } else {
             console.error("❌ Respuesta del servidor sin datos:", createResponse.data);
@@ -1638,6 +1785,75 @@ const Chat: React.FC = () => {
     }));
   };
 
+  const openRenderModal = (structuralData: any) => {
+    console.log("🎬 ABRIENDO RENDER MODAL CON DATOS:", {
+      hasData: !!structuralData,
+      type: typeof structuralData,
+      keys: structuralData ? Object.keys(structuralData) : [],
+      roomCount: structuralData?.rooms?.length || 0,
+      wallCount: structuralData?.walls?.length || 0,
+      fullData: structuralData
+    });
+    setRenderModalData(structuralData);
+    setIsRenderModalOpen(true);
+  };
+
+  const closeRenderModal = () => {
+    setIsRenderModalOpen(false);
+  };
+
+  const buildRenderMessage = (structuralData: any, anchorCreatedAt?: string): Message => {
+    const baseTime = anchorCreatedAt ? new Date(anchorCreatedAt).getTime() : Date.now();
+    return {
+      uuid: generateUUID(),
+      role: "assistant",
+      content: "Ver renderizado",
+      status: "completed",
+      createdAt: new Date(baseTime + 1).toISOString(),
+      metadata: {
+        renderAction: "open_render",
+        renderMode: "modal",
+        structuralData: structuralData,
+      },
+    };
+  };
+
+  const ensureRenderMessage = (messages: Message[]): Message[] => {
+    console.log("🔍 ensureRenderMessage: Verificando mensajes...", {
+      totalMessages: messages.length,
+      hasRenderAction: messages.some(msg => msg.metadata?.renderAction === "open_render"),
+    });
+    
+    const hasRenderAction = messages.some(
+      (msg) => msg.metadata?.renderAction === "open_render"
+    );
+    if (hasRenderAction) {
+      console.log("✅ Ya existe mensaje de render action");
+      return messages;
+    }
+
+    const source = messages.find((msg) => msg.metadata?.structuralData);
+    console.log("🔍 Buscando structuralData:", {
+      found: !!source,
+      sourceRole: source?.role,
+      hasStructuralData: !!source?.metadata?.structuralData,
+    });
+    
+    if (!source || !source.metadata?.structuralData) {
+      console.log("⚠️ No se encontró structuralData en ningún mensaje");
+      return messages;
+    }
+
+    console.log("✅ Generando mensaje de render con structuralData");
+    const renderMessage = buildRenderMessage(
+      source.metadata.structuralData,
+      source.createdAt
+    );
+    return [...messages, renderMessage].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  };
+
   return (
     <div className="chat-component-app-container">
       <div className="chat-component-container">
@@ -1672,17 +1888,50 @@ const Chat: React.FC = () => {
                       </div>
 
                       <div className="chat-component-message-content">
-                        <div className="chat-component-message-text">
-                          {message.role === 'assistant' && message.content.includes('¡Hola') ? 
-                            formatMessageContent(message.content, true) :
-                            formatMessageContent(message.content)
-                          }
-                          {message.role === 'assistant' && language !== 'es' && message.content.includes('🌐') && (
-                            <span style={{ fontSize: '12px', opacity: 0.6, marginLeft: '8px' }}>
-                              🌐 Translated
-                            </span>
+                        {/* 🔥 ACCION PARA VER RENDERIZADO EN MODAL */}
+                        {message.metadata?.renderAction === "open_render" &&
+                          message.metadata?.structuralData ? (
+                            <div className="chat-render-action">
+                              <button
+                                className="chat-render-button"
+                                onClick={() =>
+                                  openRenderModal(message.metadata?.structuralData)
+                                }
+                              >
+                                Ver renderizado
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="chat-component-message-text">
+                              {message.role === 'assistant' && message.content.includes('¡Hola') ? 
+                                formatMessageContent(message.content, true) :
+                                formatMessageContent(message.content)
+                              }
+                              {message.role === 'assistant' && language !== 'es' && message.content.includes('🌐') && (
+                                <span style={{ fontSize: '12px', opacity: 0.6, marginLeft: '8px' }}>
+                                  🌐 Translated
+                                </span>
+                              )}
+                            </div>
+                          )}                        
+                        {/* 🔥 VISUALIZACIÓN INSTANTÁNEA DEL PLANO 3D (INLINE SOLO SI SE PIDE) */}
+                        {message.metadata?.structuralData &&
+                          message.metadata?.renderMode === "inline" && (
+                            <div className="chat-model-viewer-container" style={{ 
+                              marginTop: '16px', 
+                              border: '1px solid #e0e0e0', 
+                              borderRadius: '8px', 
+                              overflow: 'hidden',
+                              backgroundColor: '#fff'
+                            }}>
+                              <ModelViewer
+                                planData={message.metadata.structuralData}
+                                is3DMode={is3DMode}
+                                onToggleViewMode={() => setIs3DMode(!is3DMode)}
+                              />
+                            </div>
                           )}
-                        </div>
+                        
                         <div className="chat-component-message-time">
                           {formatTime(message.createdAt)}
                         </div>
@@ -1810,6 +2059,34 @@ const Chat: React.FC = () => {
                 )}
               </div>
             </ScrollToBottom>
+
+            {isRenderModalOpen && renderModalData && (
+              <div className="chat-render-modal" onClick={closeRenderModal}>
+                <div
+                  className="chat-render-modal-content"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="chat-render-modal-header">
+                    <div className="chat-render-modal-title">Renderizado</div>
+                    <button
+                      className="chat-render-modal-close"
+                      onClick={closeRenderModal}
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                  <div className="chat-render-modal-body">
+                    <div className="chat-render-modal-viewer-container">
+                      <ModelViewer
+                        planData={renderModalData}
+                        is3DMode={is3DMode}
+                        onToggleViewMode={() => setIs3DMode(!is3DMode)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 🔧 ÁREA DE INPUT SIMPLIFICADA */}
             <div className="chat-component-input-area">

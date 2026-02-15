@@ -12,6 +12,7 @@ import {
 } from "../controllers/designs/DesignController";
 import { downloadFile } from "../controllers/files/DesignFileController";
 import Message from "../database/models/Message.model";
+import Design from "../database/models/Design.model"; // 🔥 Import para bulk messages
 import MainAIService from '../services/ai/MainAIService';
 import { DesignFileService } from "../services/ai/DesignFileService";
 import { verifyUser } from "../middlewares/auth/Authentication";
@@ -61,6 +62,73 @@ router.put(
   asyncHandler(updateDesignStatus)
 );
 router.get('/designs/:designUuid/messages', asyncHandler(verifyUser), asyncHandler(getDesignMessages)); // 🔥 AGREGAR ESTA LÍNEA
+
+// 💾 GUARDAR MÚLTIPLES MENSAJES (BULK)
+router.post('/designs/:designUuid/messages/bulk', asyncHandler(verifyUser), asyncHandler(async (req, res) => {
+  try {
+    const { designUuid } = req.params;
+    const { messages } = req.body;
+    const userId = req.userId;
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere un array de mensajes'
+      });
+    }
+
+    const design = await Design.findOne({ 
+      where: { uuid: designUuid, userId }
+    });
+    if (!design) {
+      return res.status(404).json({ success: false, message: 'Diseño no encontrado' });
+    }
+
+    // Guardar cada mensaje si no existe ya
+    const savedMessages = [];
+    for (const messageData of messages) {
+      try {
+        // Verificar si el mensaje ya existe
+        const exists = await Message.findOne({ 
+          where: { uuid: messageData.uuid }
+        });
+        if (!exists) {
+          const newMessage = await Message.create({
+            uuid: messageData.uuid,
+            designId: designUuid,
+            role: messageData.role,
+            content: messageData.content,
+            status: messageData.status || 'completed',
+            metadata: messageData.metadata ? JSON.parse(JSON.stringify(messageData.metadata)) : {},
+            createdAt: messageData.createdAt || new Date()
+          });
+          savedMessages.push(newMessage);
+        }
+      } catch (msgError: any) {
+        // Ignorar errores de duplicados (el mensaje ya existe)
+        if (msgError.name !== 'SequelizeUniqueConstraintError') {
+          console.error(`⚠️ Error guardando mensaje ${messageData.uuid}:`, msgError.message);
+        }
+      }
+    }
+
+    console.log(`✅ Guardados ${savedMessages.length} mensajes nuevos para diseño ${designUuid}`);
+
+    res.json({
+      success: true,
+      message: `${savedMessages.length} mensajes guardados exitosamente`,
+      data: { savedCount: savedMessages.length }
+    });
+  } catch (error: any) {
+    console.error('❌ Error guardando mensajes en bulk:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al guardar mensajes',
+      error: error.message
+    });
+  }
+}));
+
 router.delete("/designs/:designUuid", asyncHandler(deleteDesign));
 
 router.post(
