@@ -50,6 +50,7 @@ type PlacementType = 'front' | 'back' | 'private' | 'connector' | 'flexible';
 type StandardRoomType = 'living_area' | 'kitchen' | 'bedroom' | 'bathroom' | 'dining_area' | 'hallway' | 'storage' | 'circulation' | 'main_area' | 'reception' | 'office';
 
 export class ArchitecturalLayoutEngine {
+  private static readonly DOOR_CLEAR_OPENING = 0.9;
   
   // 🔧 ESTÁNDARES CORREGIDOS
   private static readonly HOUSING_STANDARDS: Record<BuildingType, { essential: string[]; comfort: string[]; luxury: string[] }> = {
@@ -143,7 +144,7 @@ export class ArchitecturalLayoutEngine {
       console.log('✅ Habitaciones sugeridas:', suggestedRooms.length);
       
       // 4. Combinar todas las habitaciones
-      const allRooms = [...userRooms, ...suggestedRooms];
+      const allRooms = this.ensureCirculationRoom([...userRooms, ...suggestedRooms], totalArea);
       
       // 5. Calcular dimensiones del edificio
       const building = this.calculateOptimalBuildingDimensions(allRooms, totalArea, constraints);
@@ -412,6 +413,37 @@ export class ArchitecturalLayoutEngine {
   }
 
   /**
+   * Garantiza un espacio de circulacion para conectar todas las habitaciones.
+   */
+  private static ensureCirculationRoom(rooms: DynamicRoom[], totalArea: number): DynamicRoom[] {
+    if (rooms.some(room => room.type === 'circulation')) {
+      return rooms;
+    }
+
+    const guide = this.ROOM_FUNCTION_GUIDES.circulation;
+    const targetArea = Math.max(guide.minArea, Math.min(guide.maxArea, totalArea * 0.08));
+    const width = 1.5;
+    const height = Math.max(guide.minArea / width, targetArea / width);
+
+    const circulationRoom: DynamicRoom = {
+      id: `suggested_circulation_${Date.now()}`,
+      name: 'Pasillo de Circulacion',
+      type: 'circulation',
+      area: Math.round(targetArea * 10) / 10,
+      width: Math.round(width * 10) / 10,
+      height: Math.round(height * 10) / 10,
+      aspectRatio: width / Math.max(height, 0.1),
+      priority: 'required',
+      placement: 'connector',
+      adjacencies: ['*'],
+      specifications: ['Generado automaticamente para conectividad'],
+      source: 'suggested'
+    };
+
+    return [...rooms, circulationRoom];
+  }
+
+  /**
    * Genera puertas y ventanas automáticamente
    */
   private static generateDoorsAndWindows(layout: LayoutRoom[], building: any): LayoutRoom[] {
@@ -427,28 +459,75 @@ export class ArchitecturalLayoutEngine {
    */
   private static generateRoomDoors(room: LayoutRoom, allRooms: LayoutRoom[], building: any) {
     const doors: { position: [number, number], orientation: string, type: string }[] = [];
-    
-    // Puerta principal
+    const seenDoors = new Set<string>();
+
+    const addDoor = (door: { position: [number, number], orientation: string, type: string }) => {
+      const key = `${Math.round(door.position[0] * 100)}_${Math.round(door.position[1] * 100)}_${door.type}`;
+      if (seenDoors.has(key)) return;
+      seenDoors.add(key);
+      doors.push(door);
+    };
+
     const hallway = allRooms.find(r => r.type === 'circulation');
-    
-    if (hallway) {
-      const doorPosition = this.findOptimalDoorPosition(room, hallway);
-      if (doorPosition) {
-        doors.push({
-          position: [doorPosition.x, doorPosition.y] as [number, number],
-          orientation: doorPosition.orientation,
+
+    if (hallway && room.id !== hallway.id) {
+      const toHallway = this.findOptimalDoorPosition(room, hallway);
+      if (toHallway) {
+        addDoor({
+          position: [toHallway.x, toHallway.y] as [number, number],
+          orientation: toHallway.orientation,
           type: 'interior'
         });
+        return doors;
       }
-    } else {
-      // Puerta hacia el exterior
-      doors.push({
+
+      // Fallback: conectar con cualquier habitacion adyacente.
+      for (const candidate of allRooms) {
+        if (candidate.id === room.id) continue;
+        const fallbackDoor = this.findOptimalDoorPosition(room, candidate);
+        if (fallbackDoor) {
+          addDoor({
+            position: [fallbackDoor.x, fallbackDoor.y] as [number, number],
+            orientation: fallbackDoor.orientation,
+            type: 'interior'
+          });
+          return doors;
+        }
+      }
+    }
+
+    if (room.type === 'circulation') {
+      // El pasillo recibe una puerta por cada espacio adyacente.
+      for (const candidate of allRooms) {
+        if (candidate.id === room.id) continue;
+        const accessDoor = this.findOptimalDoorPosition(room, candidate);
+        if (accessDoor) {
+          addDoor({
+            position: [accessDoor.x, accessDoor.y] as [number, number],
+            orientation: accessDoor.orientation,
+            type: 'interior'
+          });
+        }
+      }
+
+      // Puerta principal de acceso al exterior.
+      addDoor({
         position: [room.position.x + room.size.width / 2, room.position.y] as [number, number],
         orientation: 'north',
         type: 'main'
       });
+      return doors;
     }
-    
+
+    // Ultimo fallback para no dejar habitaciones inaccesibles.
+    if (doors.length === 0) {
+      addDoor({
+        position: [room.position.x + room.size.width / 2, room.position.y] as [number, number],
+        orientation: 'north',
+        type: 'interior'
+      });
+    }
+
     return doors;
   }
 
@@ -457,25 +536,64 @@ export class ArchitecturalLayoutEngine {
    */
   private static generateRoomWindows(room: LayoutRoom, building: any) {
     const windows: { position: [number, number, number], size: [number, number], orientation: string }[] = [];
-    
-    const windowHeight = 1.5;
-    const windowWidth = Math.min(room.size.width * 0.4, 2.0);
-    
-    // Ventana en pared externa
-    if (room.position.y === 0) {
-      windows.push({
-        position: [room.position.x + room.size.width / 2, room.position.y, windowHeight] as [number, number, number],
-        size: [windowWidth, 1.0] as [number, number],
-        orientation: 'north'
-      });
-    } else if (room.position.x === 0) {
-      windows.push({
-        position: [room.position.x, room.position.y + room.size.height / 2, windowHeight] as [number, number, number],
-        size: [windowWidth, 1.0] as [number, number],
-        orientation: 'west'
-      });
+    if (room.type === 'circulation') {
+      return windows;
     }
-    
+
+    const eps = 0.05;
+    const windowHeight = 1.5;
+    const requiredWindows = Math.max(1, Math.min(3, Math.ceil(room.area / 18)));
+    const candidates: Array<{ position: [number, number, number], size: [number, number], orientation: string }> = [];
+
+    const createHorizontalWindows = (orientation: 'north' | 'south', y: number, count: number) => {
+      const width = Math.min(Math.max(room.size.width * 0.28, 0.9), 1.8);
+      const centers = count === 1
+        ? [0.5]
+        : count === 2
+        ? [0.33, 0.67]
+        : [0.25, 0.5, 0.75];
+      centers.forEach(ratio => {
+        candidates.push({
+          position: [room.position.x + room.size.width * ratio, y, windowHeight] as [number, number, number],
+          size: [width, 1.0] as [number, number],
+          orientation
+        });
+      });
+    };
+
+    const createVerticalWindows = (orientation: 'west' | 'east', x: number, count: number) => {
+      const width = Math.min(Math.max(room.size.height * 0.28, 0.9), 1.8);
+      const centers = count === 1
+        ? [0.5]
+        : count === 2
+        ? [0.33, 0.67]
+        : [0.25, 0.5, 0.75];
+      centers.forEach(ratio => {
+        candidates.push({
+          position: [x, room.position.y + room.size.height * ratio, windowHeight] as [number, number, number],
+          size: [width, 1.0] as [number, number],
+          orientation
+        });
+      });
+    };
+
+    if (room.position.y <= eps) {
+      createHorizontalWindows('north', room.position.y, room.size.width > 4.5 ? 2 : 1);
+    }
+    if (room.position.y + room.size.height >= building.depth - eps) {
+      createHorizontalWindows('south', room.position.y + room.size.height, room.size.width > 4.5 ? 2 : 1);
+    }
+    if (room.position.x <= eps) {
+      createVerticalWindows('west', room.position.x, room.size.height > 4.5 ? 2 : 1);
+    }
+    if (room.position.x + room.size.width >= building.width - eps) {
+      createVerticalWindows('east', room.position.x + room.size.width, room.size.height > 4.5 ? 2 : 1);
+    }
+
+    for (let i = 0; i < candidates.length && windows.length < requiredWindows; i++) {
+      windows.push(candidates[i]);
+    }
+
     return windows;
   }
 
@@ -483,26 +601,82 @@ export class ArchitecturalLayoutEngine {
    * Encuentra la posición óptima para una puerta
    */
   private static findOptimalDoorPosition(roomA: LayoutRoom, roomB: LayoutRoom) {
-    const margin = 0.1;
-    
-    // Verificar adyacencia horizontal
-    if (Math.abs(roomA.position.x + roomA.size.width - roomB.position.x) < margin) {
+    const margin = 0.08;
+    const minimumOverlap = this.DOOR_CLEAR_OPENING + 0.2;
+
+    const aLeft = roomA.position.x;
+    const aRight = roomA.position.x + roomA.size.width;
+    const aTop = roomA.position.y;
+    const aBottom = roomA.position.y + roomA.size.height;
+
+    const bLeft = roomB.position.x;
+    const bRight = roomB.position.x + roomB.size.width;
+    const bTop = roomB.position.y;
+    const bBottom = roomB.position.y + roomB.size.height;
+
+    const verticalOverlapFrom = Math.max(aTop, bTop);
+    const verticalOverlapTo = Math.min(aBottom, bBottom);
+    const horizontalOverlapFrom = Math.max(aLeft, bLeft);
+    const horizontalOverlapTo = Math.min(aRight, bRight);
+
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+    // A a la izquierda de B
+    if (Math.abs(aRight - bLeft) <= margin && verticalOverlapTo - verticalOverlapFrom >= minimumOverlap) {
+      const y = clamp(
+        (verticalOverlapFrom + verticalOverlapTo) / 2,
+        verticalOverlapFrom + this.DOOR_CLEAR_OPENING / 2,
+        verticalOverlapTo - this.DOOR_CLEAR_OPENING / 2
+      );
       return {
-        x: roomA.position.x + roomA.size.width,
-        y: roomA.position.y + roomA.size.height / 2,
+        x: aRight,
+        y,
         orientation: 'east'
       };
     }
-    
-    // Verificar adyacencia vertical
-    if (Math.abs(roomA.position.y + roomA.size.height - roomB.position.y) < margin) {
+
+    // A a la derecha de B
+    if (Math.abs(aLeft - bRight) <= margin && verticalOverlapTo - verticalOverlapFrom >= minimumOverlap) {
+      const y = clamp(
+        (verticalOverlapFrom + verticalOverlapTo) / 2,
+        verticalOverlapFrom + this.DOOR_CLEAR_OPENING / 2,
+        verticalOverlapTo - this.DOOR_CLEAR_OPENING / 2
+      );
       return {
-        x: roomA.position.x + roomA.size.width / 2,
-        y: roomA.position.y + roomA.size.height,
+        x: aLeft,
+        y,
+        orientation: 'west'
+      };
+    }
+
+    // A encima de B
+    if (Math.abs(aBottom - bTop) <= margin && horizontalOverlapTo - horizontalOverlapFrom >= minimumOverlap) {
+      const x = clamp(
+        (horizontalOverlapFrom + horizontalOverlapTo) / 2,
+        horizontalOverlapFrom + this.DOOR_CLEAR_OPENING / 2,
+        horizontalOverlapTo - this.DOOR_CLEAR_OPENING / 2
+      );
+      return {
+        x,
+        y: aBottom,
         orientation: 'south'
       };
     }
-    
+
+    // A debajo de B
+    if (Math.abs(aTop - bBottom) <= margin && horizontalOverlapTo - horizontalOverlapFrom >= minimumOverlap) {
+      const x = clamp(
+        (horizontalOverlapFrom + horizontalOverlapTo) / 2,
+        horizontalOverlapFrom + this.DOOR_CLEAR_OPENING / 2,
+        horizontalOverlapTo - this.DOOR_CLEAR_OPENING / 2
+      );
+      return {
+        x,
+        y: aTop,
+        orientation: 'north'
+      };
+    }
+
     return null;
   }
 
@@ -581,29 +755,200 @@ export class ArchitecturalLayoutEngine {
   }
 
   private static solveDynamicLayoutConstraints(rooms: DynamicRoom[], building: any, graph: Graph): LayoutRoom[] {
-    const layout: LayoutRoom[] = [];
     const sortedRooms = this.sortRoomsByDynamicPriority(rooms);
-    const placedRooms = new Map<string, LayoutRoom>();
-    
-    for (const room of sortedRooms) {
-      const position = this.findOptimalPositionDynamic(room, placedRooms, building, graph);
-      
-      if (position) {
-        const layoutRoom: LayoutRoom = {
+    const hallway = sortedRooms.find(room => room.type === 'circulation');
+    const nonHallwayRooms = sortedRooms.filter(room => room.type !== 'circulation');
+
+    // Caso simple: una sola habitacion.
+    if (!hallway && nonHallwayRooms.length === 1) {
+      const single = nonHallwayRooms[0];
+      const width = Math.min(single.width, building.width);
+      const height = Math.min(single.height, building.depth);
+      return [{
+        ...single,
+        position: { x: (building.width - width) / 2, y: (building.depth - height) / 2 },
+        size: { width, height },
+        rotation: 0,
+        doors: [],
+        windows: []
+      }];
+    }
+
+    // Distribucion principal con corredor central para conectividad garantizada.
+    if (hallway) {
+      const layout: LayoutRoom[] = [];
+
+      const hallwayWidth = Math.max(1.2, Math.min(2.2, building.width * 0.16));
+      const sideWidth = Math.max(2.2, (building.width - hallwayWidth) / 2);
+      const hallwayX = sideWidth;
+
+      const leftRooms: DynamicRoom[] = [];
+      const rightRooms: DynamicRoom[] = [];
+      let leftArea = 0;
+      let rightArea = 0;
+
+      // Balancear por area y afinidad funcional para mantener logica arquitectonica.
+      for (const room of nonHallwayRooms) {
+        const leftScore = this.scoreRoomSideAssignment(room, leftRooms, leftArea, rightArea);
+        const rightScore = this.scoreRoomSideAssignment(room, rightRooms, rightArea, leftArea);
+
+        if (leftScore <= rightScore) {
+          leftRooms.push(room);
+          leftArea += room.area;
+        } else {
+          rightRooms.push(room);
+          rightArea += room.area;
+        }
+      }
+
+      const orderedLeftRooms = this.sortRoomsForCorridorSequence(leftRooms);
+      const orderedRightRooms = this.sortRoomsForCorridorSequence(rightRooms);
+
+      const leftScale = Math.min(1, (sideWidth * building.depth) / Math.max(leftArea, 0.01));
+      const rightScale = Math.min(1, (sideWidth * building.depth) / Math.max(rightArea, 0.01));
+
+      const minRoomDepth = 1.8;
+      const leftRawHeights = orderedLeftRooms.map(room => Math.max(minRoomDepth, (room.area * leftScale) / sideWidth));
+      const rightRawHeights = orderedRightRooms.map(room => Math.max(minRoomDepth, (room.area * rightScale) / sideWidth));
+      const leftHeightFactor = building.depth / Math.max(leftRawHeights.reduce((sum, h) => sum + h, 0), 0.01);
+      const rightHeightFactor = building.depth / Math.max(rightRawHeights.reduce((sum, h) => sum + h, 0), 0.01);
+
+      let leftY = 0;
+      for (let i = 0; i < orderedLeftRooms.length; i++) {
+        const room = orderedLeftRooms[i];
+        const adjustedArea = room.area * leftScale;
+        const computedHeight = leftRawHeights[i] * leftHeightFactor;
+        const safeHeight = i === orderedLeftRooms.length - 1
+          ? Math.max(0.8, building.depth - leftY)
+          : Math.max(0.8, Math.min(computedHeight, building.depth - leftY));
+
+        layout.push({
           ...room,
-          position: { x: position.x, y: position.y },
-          size: { width: room.width, height: room.height },
+          area: Math.round(adjustedArea * 10) / 10,
+          position: { x: 0, y: leftY },
+          size: { width: sideWidth, height: safeHeight },
           rotation: 0,
           doors: [],
           windows: []
-        };
-        
-        layout.push(layoutRoom);
-        placedRooms.set(room.id, layoutRoom);
+        });
+
+        leftY += safeHeight;
       }
+
+      let rightY = 0;
+      for (let i = 0; i < orderedRightRooms.length; i++) {
+        const room = orderedRightRooms[i];
+        const adjustedArea = room.area * rightScale;
+        const computedHeight = rightRawHeights[i] * rightHeightFactor;
+        const safeHeight = i === orderedRightRooms.length - 1
+          ? Math.max(0.8, building.depth - rightY)
+          : Math.max(0.8, Math.min(computedHeight, building.depth - rightY));
+
+        layout.push({
+          ...room,
+          area: Math.round(adjustedArea * 10) / 10,
+          position: { x: hallwayX + hallwayWidth, y: rightY },
+          size: { width: sideWidth, height: safeHeight },
+          rotation: 0,
+          doors: [],
+          windows: []
+        });
+
+        rightY += safeHeight;
+      }
+
+      layout.push({
+        ...hallway,
+        area: Math.round((hallwayWidth * building.depth) * 10) / 10,
+        position: { x: hallwayX, y: 0 },
+        size: { width: hallwayWidth, height: building.depth },
+        rotation: 0,
+        doors: [],
+        windows: []
+      });
+
+      return layout;
     }
-    
+
+    // Fallback sin pasillo: ubicar por grilla evitando solapes.
+    const layout: LayoutRoom[] = [];
+    const placedRooms = new Map<string, LayoutRoom>();
+
+    for (const room of sortedRooms) {
+      const position = this.findOptimalPositionDynamic(room, placedRooms, building, graph);
+      if (!position) continue;
+
+      const layoutRoom: LayoutRoom = {
+        ...room,
+        position: { x: position.x, y: position.y },
+        size: { width: room.width, height: room.height },
+        rotation: 0,
+        doors: [],
+        windows: []
+      };
+
+      layout.push(layoutRoom);
+      placedRooms.set(room.id, layoutRoom);
+    }
+
     return layout;
+  }
+
+  private static scoreRoomSideAssignment(
+    room: DynamicRoom,
+    sideRooms: DynamicRoom[],
+    currentSideArea: number,
+    oppositeSideArea: number
+  ): number {
+    const areaImbalanceScore = Math.abs((currentSideArea + room.area) - oppositeSideArea) * 0.2;
+    const semanticBonus = this.getSemanticAdjacencyScore(room, sideRooms);
+
+    let functionalPenalty = 0;
+    if (room.type === 'hygiene' && !sideRooms.some(r => r.type === 'rest')) {
+      functionalPenalty += 6;
+    }
+    if (room.type === 'service' && !sideRooms.some(r => r.type === 'social')) {
+      functionalPenalty += 4;
+    }
+
+    return areaImbalanceScore + functionalPenalty - semanticBonus;
+  }
+
+  private static getSemanticAdjacencyScore(room: DynamicRoom, sideRooms: DynamicRoom[]): number {
+    if (sideRooms.length === 0) return 0;
+
+    const affinityMap: Record<string, string[]> = {
+      social: ['service', 'work', 'circulation'],
+      service: ['social', 'storage', 'circulation'],
+      rest: ['hygiene', 'circulation'],
+      hygiene: ['rest', 'circulation'],
+      work: ['social', 'circulation', 'storage'],
+      storage: ['service', 'work', 'circulation'],
+      circulation: ['social', 'service', 'rest', 'hygiene', 'work', 'storage']
+    };
+
+    const preferred = affinityMap[room.type] || [];
+    const adjacentMatches = sideRooms.filter(existing => preferred.includes(existing.type)).length;
+    const lastRoom = sideRooms[sideRooms.length - 1];
+    const lastBonus = preferred.includes(lastRoom.type) ? 2 : 0;
+
+    return adjacentMatches * 1.5 + lastBonus;
+  }
+
+  private static sortRoomsForCorridorSequence(rooms: DynamicRoom[]): DynamicRoom[] {
+    const placementWeight: Record<PlacementType, number> = {
+      front: 0,
+      connector: 1,
+      flexible: 2,
+      private: 3,
+      back: 4
+    };
+
+    return [...rooms].sort((a, b) => {
+      const placementDiff = placementWeight[a.placement] - placementWeight[b.placement];
+      if (placementDiff !== 0) return placementDiff;
+      return b.area - a.area;
+    });
   }
 
   private static sortRoomsByDynamicPriority(rooms: DynamicRoom[]): DynamicRoom[] {
@@ -632,7 +977,7 @@ export class ArchitecturalLayoutEngine {
     }
     
     if (candidates.length === 0) {
-      return { x: 0, y: 0, score: 0 };
+      return null;
     }
     
     candidates.sort((a, b) => b.score - a.score);
@@ -722,6 +1067,22 @@ export class ArchitecturalLayoutEngine {
         warnings.push(`${room.name} está fuera de los límites del edificio`);
         valid = false;
       }
+
+      if (!room.doors || room.doors.length === 0) {
+        warnings.push(`${room.name} no tiene puertas de acceso`);
+        valid = false;
+      }
+
+      if (room.type !== 'circulation' && (!room.windows || room.windows.length === 0)) {
+        warnings.push(`${room.name} no tiene ventanas exteriores`);
+        valid = false;
+      }
+    }
+
+    const hasMainDoor = layout.some(room => room.doors.some(door => door.type === 'main'));
+    if (!hasMainDoor) {
+      warnings.push('No se encontró puerta principal de acceso');
+      valid = false;
     }
 
     return { valid, warnings };

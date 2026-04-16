@@ -94,6 +94,7 @@ export class TypeScriptSVGGenerator {
       .container-shadow { fill: rgba(0,0,0,0.1); }
       .wall { fill: none; stroke: ${this.SVG_CONFIG.colors.walls}; stroke-width: ${this.SVG_CONFIG.strokeWidth}; stroke-linecap: round; }
       .door { fill: none; stroke: ${this.SVG_CONFIG.colors.doors}; stroke-width: ${this.SVG_CONFIG.strokeWidth * 1.5}; stroke-linecap: round; }
+      .main-door { fill: none; stroke: #b00020; stroke-width: ${this.SVG_CONFIG.strokeWidth * 2.2}; stroke-linecap: round; }
       .window { fill: none; stroke: ${this.SVG_CONFIG.colors.windows}; stroke-width: ${this.SVG_CONFIG.strokeWidth * 1.2}; stroke-linecap: round; }
       .room { fill: ${this.SVG_CONFIG.colors.room_fill}; stroke: ${this.SVG_CONFIG.colors.room_stroke}; stroke-width: 0.8; opacity: 0.9; }
       .room:hover { opacity: 1; stroke-width: 1.2; }
@@ -149,13 +150,17 @@ export class TypeScriptSVGGenerator {
   <g transform="translate(10, ${containerY + containerSize + 30})">
     <text x="0" y="0" class="dimension" font-weight="bold">Leyenda:</text>
     <rect x="0" y="10" width="15" height="15" fill="#e8f4f8" stroke="#4a90a4" />
-    <text x="20" y="22" class="dimension">Dormitorios</text>
+    <text x="20" y="22" class="dimension">Habitaciones</text>
     <rect x="90" y="10" width="15" height="15" fill="#f0f8ff" stroke="#6495ed" />
-    <text x="110" y="22" class="dimension">Baños</text>
-    <rect x="150" y="10" width="15" height="15" fill="#fff5ee" stroke="#ff7f50" />
-    <text x="170" y="22" class="dimension">Cocina</text>
-    <rect x="220" y="10" width="15" height="15" fill="#f0fff0" stroke="#32cd32" />
-    <text x="240" y="22" class="dimension">Sala</text>
+    <text x="110" y="22" class="dimension">Zonas húmedas</text>
+    <rect x="0" y="35" width="15" height="15" fill="#fff3cd" stroke="#c28b00" />
+    <text x="20" y="47" class="dimension">Circulación</text>
+    <line x1="230" y1="18" x2="255" y2="18" class="door" stroke-width="4" />
+    <text x="262" y="22" class="dimension" text-anchor="start">Puertas</text>
+    <line x1="230" y1="43" x2="255" y2="43" class="main-door" stroke-width="5" />
+    <text x="262" y="47" class="dimension" text-anchor="start">Puerta principal</text>
+    <line x1="330" y1="18" x2="355" y2="18" class="window" stroke-width="3" />
+    <text x="362" y="22" class="dimension" text-anchor="start">Ventanas</text>
   </g>
 
   <!-- Información adicional -->
@@ -215,7 +220,7 @@ export class TypeScriptSVGGenerator {
         'office': 'fill: #f5f5dc; stroke: #8b7355;',
         'storage': 'fill: #f5f5f5; stroke: #808080;',
         'garage': 'fill: #e6e6fa; stroke: #9370db;',
-        'hallway': 'fill: #fafafa; stroke: #696969;'
+        'hallway': 'fill: #fff3cd; stroke: #c28b00;'
       };
 
       const roomColor = roomTypeColors[room.type as keyof typeof roomTypeColors] || 'fill: #f8f9fa; stroke: #6c757d;';
@@ -251,6 +256,15 @@ export class TypeScriptSVGGenerator {
    */
   private static generateDoorsAndWindows(rooms: NLPStructuralData['rooms'], scale: number): string {
     let elementsSVG = '\n    <!-- Puertas y Ventanas -->\n';
+    const drawnSegments = new Set<string>();
+
+    const segmentKey = (x1: number, y1: number, x2: number, y2: number, kind: 'door' | 'window') => {
+      const ax = Math.round(Math.min(x1, x2) * 100);
+      const ay = Math.round(Math.min(y1, y2) * 100);
+      const bx = Math.round(Math.max(x1, x2) * 100);
+      const by = Math.round(Math.max(y1, y2) * 100);
+      return `${kind}_${ax}_${ay}_${bx}_${by}`;
+    };
 
     rooms.forEach(room => {
       const roomX = room.position.x * scale;
@@ -262,6 +276,8 @@ export class TypeScriptSVGGenerator {
       room.doors.forEach(door => {
         const doorWidth = door.width * scale;
         let doorX, doorY, doorX2, doorY2;
+        const doorClass = door.width >= 1.2 ? 'main-door' : 'door';
+        const strokeWidth = door.width >= 1.2 ? 5 : 4;
 
         switch (door.position) {
           case 'north':
@@ -291,8 +307,12 @@ export class TypeScriptSVGGenerator {
             break;
         }
 
-        elementsSVG += `    <line x1="${doorX}" y1="${doorY}" x2="${doorX2}" y2="${doorY2}" class="door" stroke-width="4" />
-`;
+        const key = segmentKey(doorX, doorY, doorX2, doorY2, 'door');
+        if (!drawnSegments.has(key)) {
+          drawnSegments.add(key);
+          elementsSVG += `    <line x1="${doorX}" y1="${doorY}" x2="${doorX2}" y2="${doorY2}" class="${doorClass}" stroke-width="${strokeWidth}" />
+      `;
+        }
       });
 
       // Ventanas
@@ -328,8 +348,12 @@ export class TypeScriptSVGGenerator {
             break;
         }
 
-        elementsSVG += `    <line x1="${windowX}" y1="${windowY}" x2="${windowX2}" y2="${windowY2}" class="window" stroke-width="3" />
-`;
+        const key = segmentKey(windowX, windowY, windowX2, windowY2, 'window');
+        if (!drawnSegments.has(key)) {
+          drawnSegments.add(key);
+          elementsSVG += `    <line x1="${windowX}" y1="${windowY}" x2="${windowX2}" y2="${windowY2}" class="window" stroke-width="3" />
+      `;
+        }
       });
     });
 
@@ -350,8 +374,9 @@ export class TypeScriptSVGGenerator {
 
       // Solo mostrar etiquetas si la habitación es lo suficientemente grande
       if (roomWidth > 40 && roomHeight > 30) {
+        const displayName = room.type === 'hallway' ? 'Circulación' : room.name;
         // Nombre de la habitación
-        labelsSVG += `    <text x="${centerX}" y="${centerY - 8}" class="room-label">${room.name}</text>
+        labelsSVG += `    <text x="${centerX}" y="${centerY - 8}" class="room-label">${displayName}</text>
 `;
         // Área de la habitación
         labelsSVG += `    <text x="${centerX}" y="${centerY + 6}" class="room-area">${room.area}m²</text>
