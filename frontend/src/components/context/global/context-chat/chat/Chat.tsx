@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "../../../../../contexts/LanguageContext";
 import { ArchitecturalValidator } from "../../../../../utils/architecturalValidator";
-import ModelViewer from "../tools/model-viewer/ModelViewer";
+import PascalNativeViewer from "../tools/pascal-viewer/PascalNativeViewer";
 import "./Chat.css";
 
 const generateUUID = (): string => {
@@ -162,7 +162,6 @@ const Chat: React.FC = () => {
   const [designData, setDesignData] = useState<DesignData | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
   const [availableTypes, setAvailableTypes] = useState<DesignType[]>([]);
-  const [is3DMode, setIs3DMode] = useState(true); // 🔥 Estado para modo de visualización
   const [isRenderModalOpen, setIsRenderModalOpen] = useState(false);
   const [renderModalData, setRenderModalData] = useState<any | null>(null);
   
@@ -1924,10 +1923,8 @@ const Chat: React.FC = () => {
                               overflow: 'hidden',
                               backgroundColor: '#fff'
                             }}>
-                              <ModelViewer
-                                planData={message.metadata.structuralData}
-                                is3DMode={is3DMode}
-                                onToggleViewMode={() => setIs3DMode(!is3DMode)}
+                              <PascalNativeViewer
+                                pascalData={message.metadata.structuralData}
                               />
                             </div>
                           )}
@@ -2077,10 +2074,8 @@ const Chat: React.FC = () => {
                   </div>
                   <div className="chat-render-modal-body">
                     <div className="chat-render-modal-viewer-container">
-                      <ModelViewer
-                        planData={renderModalData}
-                        is3DMode={is3DMode}
-                        onToggleViewMode={() => setIs3DMode(!is3DMode)}
+                      <PascalNativeViewer
+                        pascalData={renderModalData}
                       />
                     </div>
                   </div>

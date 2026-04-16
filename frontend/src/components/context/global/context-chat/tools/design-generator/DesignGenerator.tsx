@@ -10,12 +10,11 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  BoxSelect, // Nuevo icono para pestaña 3D
 } from 'lucide-react';
 import Loader from '../progress-loader/Loader';
 import FilePreview from '../file-preview/FilePreview';
 import DesignSettings from '../design-settings/DesignSettings';
-import ModelViewer from '../model-viewer/ModelViewer';
+import PascalNativeViewer from '../pascal-viewer/PascalNativeViewer';
 import './DesignGenerator.css';
 
 interface DesignData {
@@ -47,19 +46,10 @@ const DesignGenerator: React.FC<DesignGeneratorProps> = ({
   // 👇 ACTUALIZADO: Añadir 'viewer' como opción de tab
   const [activeTab, setActiveTab] = useState<'progress' | 'files' | 'settings' | 'viewer'>('progress');
   const [selectedFile, setSelectedFile] = useState<any>(null);
-  const [is3DMode, setIs3DMode] = useState(true); // Estado para controlar la vista 2D/3D
-
-  // Encontrar URLs de archivos OBJ y MTL para el visualizador
-  const objFile = designData.files?.find(file => file.type.toLowerCase() === 'obj' && file.status === 'ready');
-  const mtlFile = designData.files?.find(file => file.type.toLowerCase() === 'mtl' && file.status === 'ready');
+  const pascalData = designData.analysis?.pascalData || null;
 
   // Determinar si se puede mostrar el visualizador
-  const canShowViewer = !!objFile?.url;
-
-  // Togglear entre modo 2D y 3D
-  const handleToggleViewMode = () => {
-    setIs3DMode(prev => !prev);
-  };
+  const canShowViewer = !!pascalData;
 
   const getFileIcon = (type: string) => {
     switch (type.toLowerCase()) {
@@ -174,7 +164,7 @@ const DesignGenerator: React.FC<DesignGeneratorProps> = ({
           disabled={!canShowViewer}
         >
           <Box size={16} />
-          Visor {is3DMode ? '3D' : '2D'}
+          Visor Pascal
         </button>
         
         <button
@@ -265,12 +255,7 @@ const DesignGenerator: React.FC<DesignGeneratorProps> = ({
         {activeTab === 'viewer' && (
           <div className="viewer-tab">
             {canShowViewer ? (
-              <ModelViewer 
-                objUrl={objFile?.url}
-                mtlUrl={mtlFile?.url}
-                is3DMode={is3DMode}
-                onToggleViewMode={handleToggleViewMode}
-              />
+              <PascalNativeViewer pascalData={pascalData} />
             ) : (
               <div className="viewer-placeholder">
                 <div className="placeholder-content">
@@ -278,15 +263,15 @@ const DesignGenerator: React.FC<DesignGeneratorProps> = ({
                   <h3>Vista previa no disponible</h3>
                   <p>
                     {designData.status === 'generating' 
-                      ? 'Los archivos se están generando...' 
-                      : 'No hay archivos 3D disponibles para mostrar'}
+                      ? 'Los datos del visor se están generando...' 
+                      : 'No hay datos de Pascal disponibles para mostrar'}
                   </p>
                   <button 
                     className="regenerate-model-btn"
-                    onClick={() => handleRegenerateFile('obj')}
+                    onClick={() => handleRegenerateFile('pascal')}
                   >
                     <RefreshCw size={16} />
-                    Regenerar modelo 3D
+                    Regenerar datos Pascal
                   </button>
                 </div>
               </div>

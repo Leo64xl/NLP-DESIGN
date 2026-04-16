@@ -1,4 +1,5 @@
 import { Graph } from 'graphlib';
+import { PascalGenerator } from '../Pascal/PascalGenerator';
 
 interface RoomRequirement {
   name: string;
@@ -168,7 +169,7 @@ export class ArchitecturalLayoutEngine {
       
       // 11. Generar datos de renderizado
       const render2D = this.generateStructuralSVG(optimizedLayout, building);
-      const render3D = this.generateStructuralThreeJS(optimizedLayout, building);
+      const pascalBlueprint = PascalGenerator.generateShell(optimizedLayout, building);
       const structural = this.generateWallStructure(optimizedLayout, building);
       
       return {
@@ -176,7 +177,7 @@ export class ArchitecturalLayoutEngine {
         layout: optimizedLayout,
         building,
         render2D,
-        render3D,
+        pascalData: pascalBlueprint,
         structural,
         validation,
         suggestions: {

@@ -110,7 +110,7 @@ export function sanitizePlan(plan: ArchitecturalPlan): ArchitecturalPlan {
       validation: result.validation,
       renderData: {
         svg: result.render2D,
-        threejs: result.render3D
+        pascal: result.pascalData
       },
       structural: result.structural
     };
