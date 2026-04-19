@@ -7,6 +7,7 @@ interface NLPStructuralData {
     description: string;
     totalArea: number;
     dimensions: { width: number; length: number; height?: number };
+    orientation?: 'north' | 'south' | 'east' | 'west';
     style: string;
     generatedAt: string;
   };
@@ -90,6 +91,7 @@ export class TypeScriptSVGGenerator {
     const displayTotalArea = this.formatMeasure(data.metadata.totalArea);
     const displayWidth = this.formatMeasure(data.metadata.dimensions.width);
     const displayLength = this.formatMeasure(data.metadata.dimensions.length);
+    const orientation = this.normalizeOrientation(data.metadata.orientation);
 
     let svgContent = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}">
@@ -109,6 +111,11 @@ export class TypeScriptSVGGenerator {
       .room-area { font: ${this.SVG_CONFIG.fonts.dimension}; fill: ${this.SVG_CONFIG.colors.text}; text-anchor: middle; opacity: 0.8; }
       .dimension { font: ${this.SVG_CONFIG.fonts.dimension}; fill: ${this.SVG_CONFIG.colors.text}; text-anchor: middle; }
       .grid { stroke: rgba(108,117,125,0.2); stroke-width: 0.5; }
+      .facade-highlight { stroke: #ff8f00; stroke-width: 4; stroke-linecap: round; }
+      .compass-ring { fill: #ffffff; stroke: #90a4ae; stroke-width: 1.2; }
+      .compass-letter { font: 8px Arial, sans-serif; fill: #455a64; text-anchor: middle; font-weight: 700; }
+      .compass-needle-main { fill: #ff7043; stroke: #d84315; stroke-width: 0.6; }
+      .compass-needle-back { fill: #cfd8dc; stroke: #90a4ae; stroke-width: 0.6; }
     </style>
   </defs>
 
@@ -125,6 +132,8 @@ export class TypeScriptSVGGenerator {
   
   <!-- Contenedor cuadrado principal -->
   <rect x="${containerX}" y="${containerY}" width="${containerSize}" height="${containerSize}" class="container" />
+  ${this.generateFacadeHighlight(containerX, containerY, containerSize, orientation)}
+  ${this.generateOrientationCompass(containerX, containerY, orientation)}
 
   <!-- Grid de referencia -->
   <g class="grid">
@@ -568,6 +577,71 @@ export class TypeScriptSVGGenerator {
 `;
 
     return dimensionsSVG;
+  }
+
+  private static normalizeOrientation(value?: string): 'north' | 'south' | 'east' | 'west' {
+    if (!value) return 'north';
+    const normalized = value.toLowerCase();
+    if (normalized === 'south' || normalized === 'east' || normalized === 'west') return normalized;
+    return 'north';
+  }
+
+  private static generateFacadeHighlight(
+    containerX: number,
+    containerY: number,
+    containerSize: number,
+    orientation: 'north' | 'south' | 'east' | 'west'
+  ): string {
+    const inset = 12;
+    const x1 = containerX + inset;
+    const x2 = containerX + containerSize - inset;
+    const y1 = containerY + inset;
+    const y2 = containerY + containerSize - inset;
+
+    if (orientation === 'north') {
+      return `<line x1="${x1}" y1="${containerY}" x2="${x2}" y2="${containerY}" class="facade-highlight" />`;
+    }
+    if (orientation === 'south') {
+      return `<line x1="${x1}" y1="${containerY + containerSize}" x2="${x2}" y2="${containerY + containerSize}" class="facade-highlight" />`;
+    }
+    if (orientation === 'east') {
+      return `<line x1="${containerX + containerSize}" y1="${y1}" x2="${containerX + containerSize}" y2="${y2}" class="facade-highlight" />`;
+    }
+
+    return `<line x1="${containerX}" y1="${y1}" x2="${containerX}" y2="${y2}" class="facade-highlight" />`;
+  }
+
+  private static generateOrientationCompass(
+    containerX: number,
+    containerY: number,
+    orientation: 'north' | 'south' | 'east' | 'west'
+  ): string {
+    const cx = containerX + 34;
+    const cy = containerY - 28;
+    const dir = {
+      north: { x: 0, y: -1 },
+      south: { x: 0, y: 1 },
+      east: { x: 1, y: 0 },
+      west: { x: -1, y: 0 }
+    }[orientation];
+
+    const nx = dir.x * 10;
+    const ny = dir.y * 10;
+    const bx = -dir.x * 7;
+    const by = -dir.y * 7;
+
+    return `
+  <g>
+    <circle cx="${cx}" cy="${cy}" r="16" class="compass-ring" />
+    <polygon points="${cx},${cy - 16} ${cx - 3},${cy - 12} ${cx + 3},${cy - 12}" class="compass-needle-main" />
+    <polygon points="${cx},${cy + 16} ${cx - 3},${cy + 12} ${cx + 3},${cy + 12}" class="compass-needle-back" />
+    <line x1="${cx}" y1="${cy}" x2="${cx + nx}" y2="${cy + ny}" stroke="#d84315" stroke-width="2" />
+    <line x1="${cx}" y1="${cy}" x2="${cx + bx}" y2="${cy + by}" stroke="#90a4ae" stroke-width="1.4" />
+    <text x="${cx}" y="${cy - 20}" class="compass-letter">N</text>
+    <text x="${cx}" y="${cy + 26}" class="compass-letter">S</text>
+    <text x="${cx - 22}" y="${cy + 3}" class="compass-letter">O</text>
+    <text x="${cx + 22}" y="${cy + 3}" class="compass-letter">E</text>
+  </g>`;
   }
 
   private static formatMeasure(value: number): string {

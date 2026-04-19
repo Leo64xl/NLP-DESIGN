@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { SpacePartitioner } from '../../utils/SpacePartitioner';
 
 // 🤖 CONFIGURACIÓN DE OPENAI
 const openaiConfig = {
@@ -17,6 +18,7 @@ interface NLPStructuralData {
     description: string;
     totalArea: number;
     dimensions: { width: number; length: number; height?: number };
+    orientation?: 'north' | 'south' | 'east' | 'west';
     style: string;
     generatedAt: string;
     qualityAudit?: {
@@ -84,6 +86,7 @@ type TypologyProfile =
   | 'default';
 
 type ZoneKey = 'north' | 'south' | 'west' | 'east';
+type Orientation = 'north' | 'south' | 'east' | 'west';
 
 export interface FileGenerationResult {
   svg: {
@@ -305,15 +308,23 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       ? data.metadata.totalArea
       : Math.max(rawWidth * rawLength, 16);
     const requestedLotArea = this.parseRequestedLotArea(userDescription);
+    const requestedOrientation = this.parseRequestedOrientation(userDescription);
+    const orientation: Orientation = requestedOrientation || 'north';
     const lotArea = requestedLotArea ?? fallbackArea;
     const squareSize = Math.max(4, Number(Math.sqrt(Math.max(lotArea, 16)).toFixed(4)));
     data.metadata.dimensions.width = squareSize;
     data.metadata.dimensions.length = squareSize;
+    data.metadata.orientation = orientation;
     data.metadata.totalArea = Math.round(lotArea * 100) / 100;
 
     // 2) Normalizar habitaciones de entrada.
     const sanitizedRooms = data.rooms
       .filter(room => !!room?.name)
+      .filter(room => {
+        const signature = `${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
+        const isEntradaLike = signature.includes('entrada') || signature.includes('acceso');
+        return !isEntradaLike;
+      })
       .map(room => {
         const safeWidth = Math.max(1.8, Number.isFinite(room.size?.width) ? room.size.width : Math.sqrt(Math.max(room.area, 4)));
         const safeHeight = Math.max(1.8, Number.isFinite(room.size?.height) ? room.size.height : Math.sqrt(Math.max(room.area, 4)));
@@ -449,24 +460,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     this.rebalanceRoomAreasByPercentages(otherRooms, roomAreaBudget, typology, profile);
 
     const circulationRooms: NLPStructuralData['rooms'] = [];
-    if (isResidentialTypology) {
-      // Entrada exterior en fachada principal: fuera del recuadro de la vivienda.
-      const entryWidth = clamp(Math.sqrt(circulationArea / 2.2), 1.35, 2.0);
-      const entryHeight = clamp(circulationArea / Math.max(entryWidth, 0.01), 3.0, 4.8);
-      const entryX = margin - entryWidth - 0.08;
-      const entryY = margin + ((usableSize - entryHeight) / 2);
-
-      circulationRooms.push({
-        name: 'Entrada',
-        type: 'hallway',
-        area: Math.round(entryWidth * entryHeight * 100) / 100,
-        position: { x: entryX, y: entryY },
-        size: { width: entryWidth, height: entryHeight },
-        doors: [],
-        windows: [],
-        features: ['Acceso exterior en fachada', 'Conector de circulación principal']
-      });
-    } else {
+    if (!isResidentialTypology) {
       // Tipologías no residenciales: circulación interior compacta.
       const maxAspectRatio = 2.6; // alto/ancho
       let corridorMainWidth = clamp(
@@ -504,19 +498,23 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
     // Blindaje: toda circulacion debe quedar dentro del perimetro util.
     for (const room of circulationRooms) {
-      const isExteriorEntry = isResidentialTypology && String(room.name || '').toLowerCase().includes('entrada');
-      const minXBound = isExteriorEntry ? (margin - room.size.width - 0.2) : margin;
-      const maxXBound = isExteriorEntry ? (margin - 0.05) : (maxX - 1.1);
-      room.position.x = clamp(room.position.x, minXBound, maxXBound);
+      room.position.x = clamp(room.position.x, margin, maxX - 1.1);
       room.position.y = clamp(room.position.y, margin, maxY - 1.1);
       room.size.width = clamp(room.size.width, 1.05, maxX - room.position.x);
       room.size.height = clamp(room.size.height, 1.05, maxY - room.position.y);
       room.area = Math.round(room.size.width * room.size.height * 100) / 100;
     }
+  const frontZones = this.getFrontZoneCandidates(orientation);
+  const privateZones = this.getPrivateZoneCandidates(orientation);
+
 
     // Zonas de cuartos sobre el area remanente (lado interior opuesto a la circulacion perimetral).
-    const corridorRight = Math.max(...circulationRooms.map(room => room.position.x + room.size.width));
-    const usableStartX = clamp(corridorRight, margin + 0.8, maxX - 3.6);
+    const corridorRight = circulationRooms.length > 0
+      ? Math.max(...circulationRooms.map(room => room.position.x + room.size.width))
+      : margin;
+    const usableStartX = isResidentialTypology
+      ? margin
+      : clamp(corridorRight, margin + 0.8, maxX - 3.6);
     const remX = usableStartX;
     const remY = margin;
     const remW = Math.max(3.4, maxX - remX);
@@ -672,23 +670,19 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       }
 
       if ((typology === 'house' || typology === 'apartment') && isKitchen) {
-        preferred.add('west');
-        preferred.add('north');
+        frontZones.forEach(zone => preferred.add(zone));
       }
 
       if ((typology === 'house' || typology === 'apartment') && isLiving) {
-        preferred.add('west');
-        preferred.add('north');
+        frontZones.forEach(zone => preferred.add(zone));
       }
 
       if ((typology === 'office' || typology === 'coworking') && isReception) {
-        preferred.add('west');
-        preferred.add('north');
+        frontZones.forEach(zone => preferred.add(zone));
       }
 
       if ((typology === 'office' || typology === 'coworking') && isOfficeSpace) {
-        preferred.add('east');
-        preferred.add('south');
+        privateZones.forEach(zone => preferred.add(zone));
       }
 
       if ((typology === 'office' || typology === 'coworking') && isKitchen) {
@@ -851,8 +845,8 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       // Cochera siempre en fachada principal (misma banda frontal de acceso).
       for (const garage of garages) {
         const gz = roomZone.get(garage);
-        if (!gz || (gz !== 'west' && gz !== 'north')) {
-          moveRoomToZone(garage, leastLoadedZone(['west', 'north']));
+        if (!gz || !frontZones.includes(gz)) {
+          moveRoomToZone(garage, leastLoadedZone(frontZones));
         }
       }
 
@@ -981,7 +975,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
         for (const bedroom of bedrooms) {
           const bz = roomZone.get(bedroom);
-          if (bz && (bz === 'west' || bz === 'north')) {
+          if (bz && frontZones.includes(bz)) {
             score -= 4;
             findings.push(`Dormitorio en zona demasiado pública: ${bedroom.name}`);
           }
@@ -989,7 +983,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
         for (const garage of garages) {
           const gz = roomZone.get(garage);
-          if (!gz || (gz !== 'west' && gz !== 'north')) {
+          if (!gz || !frontZones.includes(gz)) {
             score -= 12;
             findings.push(`Cochera fuera de fachada principal: ${garage.name}`);
           }
@@ -1012,7 +1006,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
         for (const reception of receptions) {
           const rz = roomZone.get(reception);
-          if (!rz || (rz !== 'west' && rz !== 'north')) {
+          if (!rz || !frontZones.includes(rz)) {
             score -= 16;
             findings.push(`Recepción fuera de zona de acceso: ${reception.name}`);
           }
@@ -1020,7 +1014,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
         for (const officeRoom of officeSpaces) {
           const oz = roomZone.get(officeRoom);
-          if (!oz || (oz !== 'east' && oz !== 'south')) {
+          if (!oz || !privateZones.includes(oz)) {
             score -= 7;
             findings.push(`Oficina fuera de zona productiva: ${officeRoom.name}`);
           }
@@ -1113,15 +1107,15 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
         for (const bedroom of bedrooms) {
           const bz = roomZone.get(bedroom);
-          if (bz && (bz === 'west' || bz === 'north')) {
-            moveRoomToZone(bedroom, leastLoadedZone(['east', 'south']));
+          if (bz && frontZones.includes(bz)) {
+            moveRoomToZone(bedroom, leastLoadedZone(privateZones));
           }
         }
 
         for (const garage of garages) {
           const gz = roomZone.get(garage);
-          if (!gz || (gz !== 'west' && gz !== 'north')) {
-            moveRoomToZone(garage, leastLoadedZone(['west', 'north']));
+          if (!gz || !frontZones.includes(gz)) {
+            moveRoomToZone(garage, leastLoadedZone(frontZones));
           }
         }
 
@@ -1142,15 +1136,15 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
         for (const reception of receptions) {
           const rz = roomZone.get(reception);
-          if (!rz || (rz !== 'west' && rz !== 'north')) {
-            moveRoomToZone(reception, leastLoadedZone(['west', 'north']));
+          if (!rz || !frontZones.includes(rz)) {
+            moveRoomToZone(reception, leastLoadedZone(frontZones));
           }
         }
 
         for (const officeRoom of officeSpaces) {
           const oz = roomZone.get(officeRoom);
-          if (!oz || (oz !== 'east' && oz !== 'south')) {
-            moveRoomToZone(officeRoom, leastLoadedZone(['east', 'south']));
+          if (!oz || !privateZones.includes(oz)) {
+            moveRoomToZone(officeRoom, leastLoadedZone(privateZones));
           }
         }
 
@@ -1282,6 +1276,240 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     assignByZone('west');
     assignByZone('east');
 
+    const isGarageForFacade = (room: (typeof otherRooms)[number]) => {
+      const sig = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
+      return room.type === 'garage' || sig.includes('garage') || sig.includes('cochera') || sig.includes('estacion');
+    };
+    const isLivingForFacade = (room: (typeof otherRooms)[number]) => {
+      const sig = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
+      return room.type === 'living_room' || sig.includes('sala') || sig.includes('estar') || sig.includes('living');
+    };
+
+    // Alineación obligatoria en residencial: Sala y Cochera deben tocar la fachada principal.
+    if (isResidentialTypology) {
+      const frontRooms = otherRooms
+        .filter(room => isGarageForFacade(room) || isLivingForFacade(room))
+        .sort((a, b) => {
+          const aGarage = isGarageForFacade(a) ? 1 : 0;
+          const bGarage = isGarageForFacade(b) ? 1 : 0;
+          return bGarage - aGarage;
+        });
+
+      if (frontRooms.length > 0) {
+        if (orientation === 'north' || orientation === 'south') {
+          const totalPreferred = frontRooms.reduce((sum, room) => sum + Math.max(1.8, room.size.width), 0);
+          const scale = totalPreferred > usableSize ? (usableSize / totalPreferred) : 1;
+          let cursor = margin;
+          const facadeY = orientation === 'north' ? margin : maxY;
+
+          for (let i = 0; i < frontRooms.length; i++) {
+            const room = frontRooms[i];
+            const roomsLeft = frontRooms.length - i - 1;
+            const remaining = Math.max(1.8, (margin + usableSize) - cursor);
+            const reserve = roomsLeft * 1.8;
+            const target = Math.max(1.8, room.size.width * scale);
+            const width = i === frontRooms.length - 1
+              ? remaining
+              : clamp(target, 1.8, Math.max(1.8, remaining - reserve));
+
+            room.size.width = width;
+            room.position.x = cursor;
+            room.position.y = orientation === 'north' ? facadeY : (facadeY - room.size.height);
+            cursor += width;
+          }
+        } else {
+          const totalPreferred = frontRooms.reduce((sum, room) => sum + Math.max(1.8, room.size.height), 0);
+          const scale = totalPreferred > usableSize ? (usableSize / totalPreferred) : 1;
+          let cursor = margin;
+          const facadeX = orientation === 'west' ? margin : maxX;
+
+          for (let i = 0; i < frontRooms.length; i++) {
+            const room = frontRooms[i];
+            const roomsLeft = frontRooms.length - i - 1;
+            const remaining = Math.max(1.8, (margin + usableSize) - cursor);
+            const reserve = roomsLeft * 1.8;
+            const target = Math.max(1.8, room.size.height * scale);
+            const height = i === frontRooms.length - 1
+              ? remaining
+              : clamp(target, 1.8, Math.max(1.8, remaining - reserve));
+
+            room.size.height = height;
+            room.position.y = cursor;
+            room.position.x = orientation === 'west' ? facadeX : (facadeX - room.size.width);
+            cursor += height;
+          }
+        }
+
+        // Empujar interiores hacia adentro para evitar colisiones con banda frontal.
+        const frontBottom = Math.max(...frontRooms.map(room => room.position.y + room.size.height));
+        const frontTop = Math.min(...frontRooms.map(room => room.position.y));
+        const frontRight = Math.max(...frontRooms.map(room => room.position.x + room.size.width));
+        const frontLeft = Math.min(...frontRooms.map(room => room.position.x));
+
+        for (const room of otherRooms) {
+          if (frontRooms.includes(room)) continue;
+          if (orientation === 'north' && room.position.y < frontBottom + 0.12) {
+            room.position.y = frontBottom + 0.12;
+          }
+          if (orientation === 'south' && (room.position.y + room.size.height) > frontTop - 0.12) {
+            room.position.y = (frontTop - 0.12) - room.size.height;
+          }
+          if (orientation === 'west' && room.position.x < frontRight + 0.12) {
+            room.position.x = frontRight + 0.12;
+          }
+          if (orientation === 'east' && (room.position.x + room.size.width) > frontLeft - 0.12) {
+            room.position.x = (frontLeft - 0.12) - room.size.width;
+          }
+        }
+
+        // Partición estable del resto del programa en el rectángulo remanente (sin solapes).
+        const innerGap = 0;
+        let remX2 = margin;
+        let remY2 = margin;
+        let remW2 = usableSize;
+        let remH2 = usableSize;
+
+        if (orientation === 'north') {
+          remY2 = Math.min(maxY - 1.8, frontBottom + innerGap);
+          remH2 = Math.max(1.8, maxY - remY2);
+        } else if (orientation === 'south') {
+          remY2 = margin;
+          remH2 = Math.max(1.8, (frontTop - innerGap) - margin);
+        } else if (orientation === 'west') {
+          remX2 = Math.min(maxX - 1.8, frontRight + innerGap);
+          remW2 = Math.max(1.8, maxX - remX2);
+        } else {
+          remX2 = margin;
+          remW2 = Math.max(1.8, (frontLeft - innerGap) - margin);
+        }
+
+        const interiorRooms = otherRooms.filter(room => !frontRooms.includes(room));
+        if (interiorRooms.length > 0 && remW2 > 1.7 && remH2 > 1.7) {
+          const partitionInput = interiorRooms.map((room, index) => ({
+            name: `${room.name}__idx_${index}`,
+            type: room.type,
+            weight: Math.max(1, room.area)
+          }));
+
+          const partitioned = SpacePartitioner.generateLayout(partitionInput, remW2, remH2);
+          const byKey = new Map(partitioned.map(p => [p.name, p]));
+
+          interiorRooms.forEach((room, index) => {
+            const key = `${room.name}__idx_${index}`;
+            const part = byKey.get(key);
+            if (!part?.position || !part?.size) return;
+
+            room.position.x = remX2 + part.position.x;
+            room.position.y = remY2 + part.position.y;
+            room.size.width = Math.max(0.8, part.size.width);
+            room.size.height = Math.max(0.8, part.size.height);
+            room.area = Math.round(room.size.width * room.size.height * 100) / 100;
+          });
+        }
+      }
+    }
+
+    // Resolución geométrica de colisiones para evitar solapes tras reanclajes.
+    const overlaps = (a: (typeof otherRooms)[number], b: (typeof otherRooms)[number]) => {
+      const overlapX = Math.min(a.position.x + a.size.width, b.position.x + b.size.width) - Math.max(a.position.x, b.position.x);
+      const overlapY = Math.min(a.position.y + a.size.height, b.position.y + b.size.height) - Math.max(a.position.y, b.position.y);
+      return { overlapX, overlapY };
+    };
+
+    for (let iter = 0; iter < 24; iter++) {
+      let moved = false;
+      for (let i = 0; i < otherRooms.length; i++) {
+        for (let j = i + 1; j < otherRooms.length; j++) {
+          const a = otherRooms[i];
+          const b = otherRooms[j];
+          const { overlapX, overlapY } = overlaps(a, b);
+          if (overlapX <= 0 || overlapY <= 0) continue;
+
+          const aProtected = isResidentialTypology && (isGarageForFacade(a) || isLivingForFacade(a));
+          const bProtected = isResidentialTypology && (isGarageForFacade(b) || isLivingForFacade(b));
+          const movable = aProtected && !bProtected ? b : (bProtected && !aProtected ? a : a);
+          const fixed = movable === a ? b : a;
+
+          const movableCenterX = movable.position.x + (movable.size.width / 2);
+          const movableCenterY = movable.position.y + (movable.size.height / 2);
+          const fixedCenterX = fixed.position.x + (fixed.size.width / 2);
+          const fixedCenterY = fixed.position.y + (fixed.size.height / 2);
+
+          const requiredX = overlapX + 0.08;
+          const requiredY = overlapY + 0.08;
+
+          const spaceRight = Math.max(0, maxX - (movable.position.x + movable.size.width));
+          const spaceLeft = Math.max(0, movable.position.x - margin);
+          const spaceDown = Math.max(0, maxY - (movable.position.y + movable.size.height));
+          const spaceUp = Math.max(0, movable.position.y - margin);
+
+          const xDirection = movableCenterX >= fixedCenterX ? 1 : -1;
+          const yDirection = movableCenterY >= fixedCenterY ? 1 : -1;
+
+          const candidates: Array<{ dx: number; dy: number; distance: number }> = [];
+
+          const addHorizontalCandidate = (sign: 1 | -1) => {
+            const capacity = sign > 0 ? spaceRight : spaceLeft;
+            if (capacity >= requiredX) {
+              candidates.push({ dx: sign * requiredX, dy: 0, distance: requiredX });
+            }
+          };
+          const addVerticalCandidate = (sign: 1 | -1) => {
+            const capacity = sign > 0 ? spaceDown : spaceUp;
+            if (capacity >= requiredY) {
+              candidates.push({ dx: 0, dy: sign * requiredY, distance: requiredY });
+            }
+          };
+
+          addHorizontalCandidate(xDirection as 1 | -1);
+          addVerticalCandidate(yDirection as 1 | -1);
+          addHorizontalCandidate((xDirection * -1) as 1 | -1);
+          addVerticalCandidate((yDirection * -1) as 1 | -1);
+
+          if (candidates.length > 0) {
+            const best = candidates.sort((m, n) => m.distance - n.distance)[0];
+            movable.position.x += best.dx;
+            movable.position.y += best.dy;
+          } else {
+            // Ultimo recurso: reducir ligeramente el cuarto movible para romper solape.
+            if (overlapX >= overlapY) {
+              movable.size.width = Math.max(0.8, movable.size.width - (overlapX + 0.08));
+            } else {
+              movable.size.height = Math.max(0.8, movable.size.height - (overlapY + 0.08));
+            }
+          }
+
+          moved = true;
+        }
+      }
+      if (!moved) break;
+
+      for (const room of otherRooms) {
+        room.position.x = clamp(room.position.x, margin, maxX - 0.8);
+        room.position.y = clamp(room.position.y, margin, maxY - 0.8);
+        room.size.width = clamp(room.size.width, 0.8, maxX - room.position.x);
+        room.size.height = clamp(room.size.height, 0.8, maxY - room.position.y);
+      }
+    }
+
+    // Cap duro para baños: evitar dimensiones excesivas tras layout geométrico.
+    for (const room of otherRooms) {
+      const sig = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()}`;
+      const isBathroom = room.type === 'bathroom' || sig.includes('bañ') || sig.includes('bano') || sig.includes('bath');
+      if (!isBathroom) continue;
+
+      const maxBathroomArea = isResidentialTypology ? 7.2 : 9;
+      const minSide = 1.45;
+      const currentArea = room.size.width * room.size.height;
+      if (currentArea <= maxBathroomArea) continue;
+
+      if (room.size.width >= room.size.height) {
+        room.size.width = Math.max(minSide, maxBathroomArea / Math.max(room.size.height, minSide));
+      } else {
+        room.size.height = Math.max(minSide, maxBathroomArea / Math.max(room.size.width, minSide));
+      }
+    }
+
     // Blindaje final: ningun cuarto puede salirse del terreno.
     for (const room of otherRooms) {
       room.position.x = clamp(room.position.x, margin, maxX - 0.8);
@@ -1317,9 +1545,69 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       }, corridorCenters[0]);
     };
 
+    const sharedEdge = (
+      a: (typeof otherRooms)[number],
+      b: (typeof otherRooms)[number],
+      tol = 0.06
+    ): { sideA: 'north' | 'south' | 'east' | 'west'; sideB: 'north' | 'south' | 'east' | 'west'; overlap: number } | null => {
+      const aLeft = a.position.x;
+      const aRight = a.position.x + a.size.width;
+      const aTop = a.position.y;
+      const aBottom = a.position.y + a.size.height;
+      const bLeft = b.position.x;
+      const bRight = b.position.x + b.size.width;
+      const bTop = b.position.y;
+      const bBottom = b.position.y + b.size.height;
+
+      const verticalOverlap = Math.max(0, Math.min(aBottom, bBottom) - Math.max(aTop, bTop));
+      const horizontalOverlap = Math.max(0, Math.min(aRight, bRight) - Math.max(aLeft, bLeft));
+
+      if (Math.abs(aRight - bLeft) <= tol && verticalOverlap > 0.45) {
+        return { sideA: 'east', sideB: 'west', overlap: verticalOverlap };
+      }
+      if (Math.abs(aLeft - bRight) <= tol && verticalOverlap > 0.45) {
+        return { sideA: 'west', sideB: 'east', overlap: verticalOverlap };
+      }
+      if (Math.abs(aBottom - bTop) <= tol && horizontalOverlap > 0.45) {
+        return { sideA: 'south', sideB: 'north', overlap: horizontalOverlap };
+      }
+      if (Math.abs(aTop - bBottom) <= tol && horizontalOverlap > 0.45) {
+        return { sideA: 'north', sideB: 'south', overlap: horizontalOverlap };
+      }
+
+      return null;
+    };
+
+    const getSharedNeighborDoorSide = (
+      room: (typeof otherRooms)[number],
+      candidates: (typeof otherRooms)
+    ): ('north' | 'south' | 'east' | 'west') | null => {
+      let best: { side: 'north' | 'south' | 'east' | 'west'; overlap: number } | null = null;
+      for (const candidate of candidates) {
+        if (candidate === room) continue;
+        const edge = sharedEdge(room, candidate);
+        if (!edge) continue;
+        if (!best || edge.overlap > best.overlap) {
+          best = { side: edge.sideA, overlap: edge.overlap };
+        }
+      }
+      return best?.side || null;
+    };
+
     const doorOrientationToCore = (room: (typeof otherRooms)[number]): 'north' | 'south' | 'east' | 'west' => {
       const centerX = room.position.x + room.size.width / 2;
       const centerY = room.position.y + room.size.height / 2;
+      if (corridorCenters.length === 0) {
+        const touchSide = getSharedNeighborDoorSide(room, otherRooms);
+        if (touchSide) return touchSide;
+
+        const planCenterX = margin + (usableSize / 2);
+        const planCenterY = margin + (usableSize / 2);
+        const dx = planCenterX - centerX;
+        const dy = planCenterY - centerY;
+        return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'east' : 'west') : (dy > 0 ? 'south' : 'north');
+      }
+
       const target = nearestCirculation(room);
       const tol = 0.08;
 
@@ -1350,14 +1638,23 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       return dy > 0 ? 'south' : 'north';
     };
 
-    for (const room of otherRooms) {
-      const roomSignature = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
-      const isGarageRoom = room.type === 'garage' || roomSignature.includes('garage') || roomSignature.includes('cochera') || roomSignature.includes('estacion');
+    const isLivingRoom = (room: (typeof otherRooms)[number]) => {
+      const sig = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
+      return room.type === 'living_room' || sig.includes('sala') || sig.includes('estar') || sig.includes('living');
+    };
 
-      room.doors.push(makeDoor(doorOrientationToCore(room), isGarageRoom ? 1.0 : 0.9));
+    const isGarageRoom = (room: (typeof otherRooms)[number]) => {
+      const sig = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
+      return room.type === 'garage' || sig.includes('garage') || sig.includes('cochera') || sig.includes('estacion');
+    };
+
+    for (const room of otherRooms) {
+      const garage = isGarageRoom(room);
+
+      room.doors.push(makeDoor(doorOrientationToCore(room), garage ? 1.0 : 0.9));
 
       // Ventanas solo si el lado toca fachada exterior y nunca en cochera.
-      if (!isGarageRoom) {
+      if (!garage) {
         if (room.position.y <= margin + eps) room.windows.push(makeWindow('north', 1.1));
         if (room.position.y + room.size.height >= maxY - eps) room.windows.push(makeWindow('south', 1.1));
         if (room.position.x <= margin + eps) room.windows.push(makeWindow('west', 1.1));
@@ -1376,25 +1673,29 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     };
 
     const chooseMainDoorSide = (availableSides: Array<'north' | 'south' | 'east' | 'west'>): 'north' | 'south' | 'east' | 'west' => {
-      const priority: Array<'north' | 'south' | 'east' | 'west'> = ['west', 'north', 'south', 'east'];
+      const priority = this.getOrientationPriority(orientation);
       return priority.find(side => availableSides.includes(side)) || availableSides[0] || 'north';
     };
 
-    const circulationExteriorCandidates = circulationRooms
+    const livingExteriorCandidates = otherRooms
+      .filter(room => isLivingRoom(room))
       .map(room => {
         const sides = exteriorSidesForRoom(room);
-        const sideScore = (sides.includes('west') ? 5 : 0) + (sides.includes('north') ? 3 : 0) + (sides.length * 0.5);
-        const priority = sideScore + Math.min(room.area, 20);
-
-        return { room, sides, priority };
+        const preferredOrder = this.getOrientationPriority(orientation);
+        const sideScore = sides.reduce((sum, side) => {
+          const idx = preferredOrder.indexOf(side);
+          const score = idx >= 0 ? (5 - idx) : 1;
+          return sum + score;
+        }, 0) + (sides.length * 0.5);
+        return { room, sides, priority: sideScore + Math.min(room.area, 20) };
       })
       .filter(candidate => candidate.sides.length > 0)
       .sort((a, b) => b.priority - a.priority);
 
     let mainDoorOwner: NLPStructuralData['rooms'][number] | null = null;
     let mainDoorSide: 'north' | 'south' | 'east' | 'west' = 'north';
-    if (circulationExteriorCandidates.length > 0) {
-      const selected = circulationExteriorCandidates[0];
+    if (livingExteriorCandidates.length > 0) {
+      const selected = livingExteriorCandidates[0];
       const side = chooseMainDoorSide(selected.sides);
       selected.room.doors.push(makeDoor(side, 1.3));
       mainDoorOwner = selected.room;
@@ -1405,9 +1706,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     // priorizando el mismo lado de fachada de la puerta principal.
     const garageExteriorConnections: NLPStructuralData['connections'] = [];
     for (const room of otherRooms) {
-      const roomSignature = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
-      const isGarageRoom = room.type === 'garage' || roomSignature.includes('garage') || roomSignature.includes('cochera') || roomSignature.includes('estacion');
-      if (!isGarageRoom) continue;
+      if (!isGarageRoom(room)) continue;
 
       room.windows = [];
       const exteriorSides = exteriorSidesForRoom(room);
@@ -1445,16 +1744,51 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       if (circulationRoom.position.y + circulationRoom.size.height >= maxY - eps && !blockedSides.has('south')) circulationRoom.windows.push(makeWindow('south', 1.0, 1.1));
     }
 
+    // Garantía: solo Sala y Garage pueden tener puertas en fachadas exteriores.
+    for (const room of otherRooms) {
+      const allowExteriorDoor = isLivingRoom(room) || isGarageRoom(room);
+      if (allowExteriorDoor) continue;
+
+      const exteriorSides = new Set(exteriorSidesForRoom(room));
+      room.doors = room.doors.filter(door => !exteriorSides.has(door.position as 'north' | 'south' | 'east' | 'west'));
+      if (room.doors.length === 0) {
+        const interiorSide = (['west', 'east', 'north', 'south'] as Array<'west' | 'east' | 'north' | 'south'>)
+          .find(side => !exteriorSides.has(side));
+        room.doors.push(makeDoor(interiorSide || 'west', 0.9));
+      }
+    }
+
     // 6) Conexiones explícitas para trazado frontend.
     const connections: NLPStructuralData['connections'] = [];
-    for (const room of otherRooms) {
-      const nearest = nearestCirculation(room);
-      connections.push({
-        from: room.name,
-        to: nearest.room.name,
-        type: 'door',
-        width: 0.9
-      });
+    if (circulationRooms.length > 0) {
+      for (const room of otherRooms) {
+        const nearest = nearestCirculation(room);
+        connections.push({
+          from: room.name,
+          to: nearest.room.name,
+          type: 'door',
+          width: 0.9
+        });
+      }
+    } else {
+      for (const room of otherRooms) {
+        if (isLivingRoom(room) || isGarageRoom(room)) continue;
+        const touchingTarget = otherRooms.find(candidate => {
+          if (candidate === room) return false;
+          return sharedEdge(room, candidate) !== null;
+        });
+
+        const fallbackTarget = touchingTarget
+          || otherRooms.find(candidate => candidate !== room && (isLivingRoom(candidate) || isGarageRoom(candidate)))
+          || otherRooms.find(candidate => candidate !== room);
+        if (!fallbackTarget) continue;
+        connections.push({
+          from: room.name,
+          to: fallbackTarget.name,
+          type: 'door',
+          width: 0.9
+        });
+      }
     }
 
     if (circulationRooms.length > 1) {
@@ -1530,6 +1864,151 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     }
 
     return null;
+  }
+
+  private static parseRequestedOrientation(description: string): Orientation | null {
+    if (!description) return null;
+
+    const text = description.toLowerCase();
+    const rules: Array<{ dir: Orientation; patterns: RegExp[] }> = [
+      {
+        dir: 'north',
+        patterns: [
+          /(?:orientaci[oó]n|fachada|frente|principal|apunt(?:ar|ando)|hacia)\s*(?:al|a)?\s*norte/i,
+          /north-facing|facing north/i,
+        ]
+      },
+      {
+        dir: 'south',
+        patterns: [
+          /(?:orientaci[oó]n|fachada|frente|principal|apunt(?:ar|ando)|hacia)\s*(?:al|a)?\s*sur/i,
+          /south-facing|facing south/i,
+        ]
+      },
+      {
+        dir: 'east',
+        patterns: [
+          /(?:orientaci[oó]n|fachada|frente|principal|apunt(?:ar|ando)|hacia)\s*(?:al|a)?\s*este/i,
+          /east-facing|facing east/i,
+        ]
+      },
+      {
+        dir: 'west',
+        patterns: [
+          /(?:orientaci[oó]n|fachada|frente|principal|apunt(?:ar|ando)|hacia)\s*(?:al|a)?\s*oeste/i,
+          /west-facing|facing west/i,
+        ]
+      },
+    ];
+
+    for (const rule of rules) {
+      if (rule.patterns.some(pattern => pattern.test(text))) {
+        return rule.dir;
+      }
+    }
+
+    return null;
+  }
+
+  private static getOrientationPriority(orientation: Orientation): Orientation[] {
+    switch (orientation) {
+      case 'south':
+        return ['south', 'east', 'west', 'north'];
+      case 'east':
+        return ['east', 'north', 'south', 'west'];
+      case 'west':
+        return ['west', 'north', 'south', 'east'];
+      case 'north':
+      default:
+        return ['north', 'west', 'east', 'south'];
+    }
+  }
+
+  private static getFrontZoneCandidates(orientation: Orientation): ZoneKey[] {
+    switch (orientation) {
+      case 'south':
+        return ['south', 'east'];
+      case 'east':
+        return ['east', 'north'];
+      case 'west':
+        return ['west', 'north'];
+      case 'north':
+      default:
+        return ['north', 'west'];
+    }
+  }
+
+  private static getPrivateZoneCandidates(orientation: Orientation): ZoneKey[] {
+    const front = this.getFrontZoneCandidates(orientation);
+    return (['north', 'south', 'east', 'west'] as ZoneKey[]).filter(zone => !front.includes(zone));
+  }
+
+  private static getExteriorEntryPlacement(
+    orientation: Orientation,
+    margin: number,
+    usableSize: number,
+    entryWidth: number,
+    entryHeight: number
+  ): { x: number; y: number } {
+    const centerX = margin + ((usableSize - entryWidth) / 2);
+    const centerY = margin + ((usableSize - entryHeight) / 2);
+    const maxY = margin + usableSize;
+    const maxX = margin + usableSize;
+
+    switch (orientation) {
+      case 'south':
+        return { x: centerX, y: maxY - entryHeight };
+      case 'east':
+        return { x: maxX - entryWidth, y: centerY };
+      case 'west':
+        return { x: margin, y: centerY };
+      case 'north':
+      default:
+        return { x: centerX, y: margin };
+    }
+  }
+
+  private static getExteriorEntryBounds(
+    orientation: Orientation,
+    margin: number,
+    maxX: number,
+    maxY: number,
+    roomWidth: number,
+    roomHeight: number
+  ): { minX: number; maxX: number; minY: number; maxY: number } {
+    const edgeTol = 0.03;
+
+    switch (orientation) {
+      case 'south':
+        return {
+          minX: margin,
+          maxX: Math.max(margin, maxX - roomWidth),
+          minY: Math.max(margin, maxY - roomHeight - edgeTol),
+          maxY: Math.max(margin, maxY - roomHeight + edgeTol),
+        };
+      case 'east':
+        return {
+          minX: Math.max(margin, maxX - roomWidth - edgeTol),
+          maxX: Math.max(margin, maxX - roomWidth + edgeTol),
+          minY: margin,
+          maxY: Math.max(margin, maxY - roomHeight),
+        };
+      case 'west':
+        return {
+          minX: margin - edgeTol,
+          maxX: margin + edgeTol,
+          minY: margin,
+          maxY: Math.max(margin, maxY - roomHeight),
+        };
+      case 'north':
+      default:
+        return {
+          minX: margin,
+          maxX: Math.max(margin, maxX - roomWidth),
+          minY: margin - edgeTol,
+          maxY: margin + edgeTol,
+        };
+    }
   }
 
   private static detectProjectTypology(data: NLPStructuralData, rooms: NLPStructuralData['rooms']): ProjectTypology {
@@ -2012,7 +2491,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
     const defaults: Record<NLPStructuralData['rooms'][number]['type'], { minArea: number; maxShare: number }> = {
       bedroom: { minArea: 7.8, maxShare: 0.32 },
-      bathroom: { minArea: 3.2, maxShare: 0.12 },
+      bathroom: { minArea: 3.2, maxShare: 0.07 },
       kitchen: { minArea: 6.2, maxShare: 0.22 },
       living_room: { minArea: 10, maxShare: 0.38 },
       dining_room: { minArea: 7, maxShare: 0.25 },

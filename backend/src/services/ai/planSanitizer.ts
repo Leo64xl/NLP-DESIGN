@@ -22,7 +22,7 @@ export function sanitizePlan(plan: ArchitecturalPlan): ArchitecturalPlan {
       plan.metadata.totalArea,
       buildingType,
       {
-        orientation: 'south', // ✅ Valor por defecto en lugar de plan.metadata.orientation
+        orientation: normalizePlanOrientation((plan.metadata as any)?.orientation),
         style: plan.metadata.style as any || 'modern' // ✅ Valor por defecto si no existe
       }
     );
@@ -195,4 +195,12 @@ function normalizeOrientation(orientation: string): 'north' | 'south' | 'east' |
   
   // Por defecto, orientación sur (mejor iluminación)
   return 'south';
+}
+
+function normalizePlanOrientation(value: unknown): 'north' | 'south' | 'east' | 'west' {
+  const normalized = String(value || '').toLowerCase();
+  if (normalized === 'south' || normalized === 'east' || normalized === 'west') {
+    return normalized;
+  }
+  return 'north';
 }
