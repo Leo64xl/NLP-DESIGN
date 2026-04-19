@@ -276,7 +276,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       const structuralData = JSON.parse(content) as NLPStructuralData;
       
       // Validar estructura básica
-      this.validateStructuralData(structuralData);
+      this.validateStructuralData(structuralData, userDescription);
       
       return structuralData;
 
@@ -289,7 +289,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
   /**
    * Valida la estructura de datos extraída y corrige posiciones si es necesario
    */
-  private static validateStructuralData(data: NLPStructuralData): void {
+  private static validateStructuralData(data: NLPStructuralData, userDescription: string): void {
     if (!data.metadata || !data.rooms || !Array.isArray(data.rooms)) {
       throw new Error('Estructura de datos inválida recibida de OpenAI');
     }
@@ -298,12 +298,18 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       throw new Error('No se detectaron habitaciones en la descripción');
     }
 
-    // 1) Asegurar plano cuadrado estable.
+    // 1) Asegurar plano cuadrado estable usando area de terreno ingresada por el usuario.
     const rawWidth = Number.isFinite(data.metadata.dimensions.width) ? data.metadata.dimensions.width : 0;
     const rawLength = Number.isFinite(data.metadata.dimensions.length) ? data.metadata.dimensions.length : 0;
-    const squareSize = Math.max(4, Math.max(rawWidth, rawLength));
+    const fallbackArea = Number.isFinite(data.metadata.totalArea) && data.metadata.totalArea > 0
+      ? data.metadata.totalArea
+      : Math.max(rawWidth * rawLength, 16);
+    const requestedLotArea = this.parseRequestedLotArea(userDescription);
+    const lotArea = requestedLotArea ?? fallbackArea;
+    const squareSize = Math.max(4, Number(Math.sqrt(Math.max(lotArea, 16)).toFixed(4)));
     data.metadata.dimensions.width = squareSize;
     data.metadata.dimensions.length = squareSize;
+    data.metadata.totalArea = Math.round(lotArea * 100) / 100;
 
     // 2) Normalizar habitaciones de entrada.
     const sanitizedRooms = data.rooms
@@ -1487,8 +1493,8 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       ...circulationRooms
     ];
 
-    // Recalcular area total desde geometría final.
-    data.metadata.totalArea = Math.round(data.rooms.reduce((sum, room) => sum + room.area, 0) * 100) / 100;
+    // Mantener area total como area de terreno solicitada por el usuario.
+    data.metadata.totalArea = Math.round(squareSize * squareSize * 100) / 100;
     data.metadata.qualityAudit = {
       typology,
       profile,
@@ -1500,6 +1506,30 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     };
 
     console.log(`✅ Re-layout arquitectónico aplicado: ${data.rooms.length} habitaciones conectadas sin solapes`);
+  }
+
+  private static parseRequestedLotArea(description: string): number | null {
+    if (!description) return null;
+
+    const text = description.toLowerCase();
+    const parseNumeric = (value: string) => Number(value.replace(',', '.'));
+
+    const terrainFirstPatterns = [
+      /(?:area|área)?\s*(?:de\s*)?(?:terreno|lote|lot)(?:\s*total)?\s*(?:de|:)?\s*(\d+(?:[\.,]\d+)?)\s*(?:m2|m²|mts2|metros\s*cuadrados?)?/i,
+      /(?:terreno|lote|lot)(?:\s*total)?\s*(?:de|:)?\s*(\d+(?:[\.,]\d+)?)\s*(?:m2|m²|mts2|metros\s*cuadrados?)?/i,
+      /(\d+(?:[\.,]\d+)?)\s*(?:m2|m²|mts2|metros\s*cuadrados?)\s*(?:de\s*)?(?:terreno|lote|lot)/i,
+    ];
+
+    for (const pattern of terrainFirstPatterns) {
+      const match = text.match(pattern);
+      if (!match) continue;
+      const area = parseNumeric(match[1]);
+      if (Number.isFinite(area) && area > 0) {
+        return area;
+      }
+    }
+
+    return null;
   }
 
   private static detectProjectTypology(data: NLPStructuralData, rooms: NLPStructuralData['rooms']): ProjectTypology {

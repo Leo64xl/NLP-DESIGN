@@ -87,6 +87,9 @@ export class TypeScriptSVGGenerator {
 
     const legendX = containerX;
     const legendY = containerY + containerSize + 26;
+    const displayTotalArea = this.formatMeasure(data.metadata.totalArea);
+    const displayWidth = this.formatMeasure(data.metadata.dimensions.width);
+    const displayLength = this.formatMeasure(data.metadata.dimensions.length);
 
     let svgContent = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}">
@@ -114,7 +117,7 @@ export class TypeScriptSVGGenerator {
 
   <!-- Título del plano -->
   <text x="${svgWidth / 2}" y="30" class="title">${data.metadata.title}</text>
-  <text x="${svgWidth / 2}" y="50" class="dimension">Área total: ${data.metadata.totalArea}m² | ${data.metadata.dimensions.width}m × ${data.metadata.dimensions.length}m</text>
+  <text x="${svgWidth / 2}" y="50" class="dimension">Área total: ${displayTotalArea}m² | ${displayWidth}m × ${displayLength}m</text>
   <text x="${svgWidth / 2}" y="65" class="dimension">Escala: 1:${Math.round(1/scale * 100)}</text>
 
   <!-- Sombra del contenedor -->
@@ -551,7 +554,7 @@ export class TypeScriptSVGGenerator {
 `;
     dimensionsSVG += `    <line x1="${planWidth}" y1="${planHeight + 10}" x2="${planWidth}" y2="${planHeight + 20}" stroke="${this.SVG_CONFIG.colors.text}" stroke-width="0.8" />
 `;
-    dimensionsSVG += `    <text x="${planWidth / 2}" y="${planHeight + 30}" class="dimension">${dimensions.width}m</text>
+    dimensionsSVG += `    <text x="${planWidth / 2}" y="${planHeight + 30}" class="dimension">${this.formatMeasure(dimensions.width)}m</text>
 `;
 
     // Dimensión vertical (largo) - al lado derecho del plano
@@ -561,10 +564,16 @@ export class TypeScriptSVGGenerator {
 `;
     dimensionsSVG += `    <line x1="${planWidth + 10}" y1="${planHeight}" x2="${planWidth + 20}" y2="${planHeight}" stroke="${this.SVG_CONFIG.colors.text}" stroke-width="0.8" />
 `;
-    dimensionsSVG += `    <text x="${planWidth + 30}" y="${planHeight / 2}" class="dimension" transform="rotate(-90, ${planWidth + 30}, ${planHeight / 2})">${dimensions.length}m</text>
+    dimensionsSVG += `    <text x="${planWidth + 30}" y="${planHeight / 2}" class="dimension" transform="rotate(-90, ${planWidth + 30}, ${planHeight / 2})">${this.formatMeasure(dimensions.length)}m</text>
 `;
 
     return dimensionsSVG;
+  }
+
+  private static formatMeasure(value: number): string {
+    if (!Number.isFinite(value)) return '0';
+    const rounded = Number(value.toFixed(2));
+    return Number.isInteger(rounded) ? String(Math.trunc(rounded)) : String(rounded);
   }
 
   /**
