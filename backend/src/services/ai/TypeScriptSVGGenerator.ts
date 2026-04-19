@@ -85,6 +85,9 @@ export class TypeScriptSVGGenerator {
     const planOffsetX = containerX + (containerSize - planWidth) / 2;
     const planOffsetY = containerY + (containerSize - planHeight) / 2;
 
+    const legendX = containerX;
+    const legendY = containerY + containerSize + 26;
+
     let svgContent = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}">
   <defs>
@@ -146,21 +149,27 @@ export class TypeScriptSVGGenerator {
     svgContent += `
   </g>
 
-  <!-- Leyenda de colores -->
-  <g transform="translate(10, ${containerY + containerSize + 30})">
-    <text x="0" y="0" class="dimension" font-weight="bold">Leyenda:</text>
-    <rect x="0" y="10" width="15" height="15" fill="#e8f4f8" stroke="#4a90a4" />
-    <text x="20" y="22" class="dimension">Habitaciones</text>
-    <rect x="90" y="10" width="15" height="15" fill="#f0f8ff" stroke="#6495ed" />
-    <text x="110" y="22" class="dimension">Zonas húmedas</text>
-    <rect x="0" y="35" width="15" height="15" fill="#fff3cd" stroke="#c28b00" />
-    <text x="20" y="47" class="dimension">Circulación</text>
-    <line x1="230" y1="18" x2="255" y2="18" class="door" stroke-width="4" />
-    <text x="262" y="22" class="dimension" text-anchor="start">Puertas</text>
-    <line x1="230" y1="43" x2="255" y2="43" class="main-door" stroke-width="5" />
-    <text x="262" y="47" class="dimension" text-anchor="start">Puerta principal</text>
-    <line x1="330" y1="18" x2="355" y2="18" class="window" stroke-width="3" />
-    <text x="362" y="22" class="dimension" text-anchor="start">Ventanas</text>
+  <!-- Leyenda de colores (distribucion en dos filas para evitar solapes) -->
+  <g transform="translate(${legendX}, ${legendY})">
+    <text x="0" y="0" class="dimension" font-weight="bold" text-anchor="start">Leyenda:</text>
+
+    <rect x="0" y="12" width="14" height="14" fill="#e8f4f8" stroke="#4a90a4" />
+    <text x="20" y="23" class="dimension" text-anchor="start">Habitaciones</text>
+
+    <rect x="140" y="12" width="14" height="14" fill="#f0f8ff" stroke="#6495ed" />
+    <text x="160" y="23" class="dimension" text-anchor="start">Zonas húmedas</text>
+
+    <rect x="300" y="12" width="14" height="14" fill="#fff3cd" stroke="#c28b00" />
+    <text x="320" y="23" class="dimension" text-anchor="start">Circulación</text>
+
+    <line x1="0" y1="43" x2="24" y2="43" class="door" stroke-width="4" />
+    <text x="32" y="47" class="dimension" text-anchor="start">Puertas</text>
+
+    <line x1="120" y1="43" x2="144" y2="43" class="main-door" stroke-width="5" />
+    <text x="152" y="47" class="dimension" text-anchor="start">Puerta principal</text>
+
+    <line x1="300" y1="43" x2="324" y2="43" class="window" stroke-width="3" />
+    <text x="332" y="47" class="dimension" text-anchor="start">Ventanas</text>
   </g>
 
   <!-- Información adicional -->
@@ -258,6 +267,21 @@ export class TypeScriptSVGGenerator {
     let elementsSVG = '\n    <!-- Puertas y Ventanas -->\n';
     const drawnSegments = new Set<string>();
 
+    const roomRects = rooms.map(room => {
+      const x = room.position.x * scale;
+      const y = room.position.y * scale;
+      const width = room.size.width * scale;
+      const height = room.size.height * scale;
+      return {
+        x,
+        y,
+        width,
+        height,
+        right: x + width,
+        bottom: y + height
+      };
+    });
+
     const segmentKey = (x1: number, y1: number, x2: number, y2: number, kind: 'door' | 'window') => {
       const ax = Math.round(Math.min(x1, x2) * 100);
       const ay = Math.round(Math.min(y1, y2) * 100);
@@ -266,7 +290,161 @@ export class TypeScriptSVGGenerator {
       return `${kind}_${ax}_${ay}_${bx}_${by}`;
     };
 
-    rooms.forEach(room => {
+    const getOpeningSegmentFromEdge = (
+      roomIndex: number,
+      edge: string,
+      spanRatio: number
+    ): { x1: number; y1: number; x2: number; y2: number } => {
+      const room = roomRects[roomIndex];
+      const roomX = room.x;
+      const roomY = room.y;
+      const roomWidth = room.width;
+      const roomHeight = room.height;
+
+      // Rectangle vertices in clockwise order: NW, NE, SE, SW.
+      const vertices = {
+        nw: { x: roomX, y: roomY },
+        ne: { x: roomX + roomWidth, y: roomY },
+        se: { x: roomX + roomWidth, y: roomY + roomHeight },
+        sw: { x: roomX, y: roomY + roomHeight }
+      };
+
+      const edgeVertices: Record<string, [{ x: number; y: number }, { x: number; y: number }]> = {
+        north: [vertices.nw, vertices.ne],
+        south: [vertices.sw, vertices.se],
+        east: [vertices.ne, vertices.se],
+        west: [vertices.nw, vertices.sw]
+      };
+
+      const normalizedEdge = (edge || 'west').toLowerCase();
+      const [a, b] = edgeVertices[normalizedEdge] || edgeVertices.west;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const edgeLength = Math.max(0.01, Math.hypot(dx, dy));
+
+      const isHorizontal = Math.abs(dy) < 1e-6;
+      const axisStart = isHorizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+      const axisEnd = isHorizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+      const axisMid = (axisStart + axisEnd) / 2;
+      const lineCoord = isHorizontal ? a.y : a.x;
+      const tol = 1.2;
+
+      // Candidate shared intervals with neighboring rooms touching the opposite side of this edge.
+      const sharedIntervals: Array<{ start: number; end: number }> = [];
+      roomRects.forEach((other, idx) => {
+        if (idx === roomIndex) return;
+
+        if (normalizedEdge === 'north' && Math.abs(other.bottom - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.x);
+          const end = Math.min(axisEnd, other.right);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+        if (normalizedEdge === 'south' && Math.abs(other.y - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.x);
+          const end = Math.min(axisEnd, other.right);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+        if (normalizedEdge === 'west' && Math.abs(other.right - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.y);
+          const end = Math.min(axisEnd, other.bottom);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+        if (normalizedEdge === 'east' && Math.abs(other.x - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.y);
+          const end = Math.min(axisEnd, other.bottom);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+      });
+
+      // Collect breakpoints from all vertices lying on this edge line (including neighbors).
+      const breakpoints = new Set<number>([axisStart, axisEnd]);
+      roomRects.forEach((rect) => {
+        const v = [
+          { x: rect.x, y: rect.y },
+          { x: rect.right, y: rect.y },
+          { x: rect.right, y: rect.bottom },
+          { x: rect.x, y: rect.bottom }
+        ];
+
+        v.forEach((p) => {
+          const aligned = isHorizontal ? Math.abs(p.y - lineCoord) <= tol : Math.abs(p.x - lineCoord) <= tol;
+          if (!aligned) return;
+          const scalar = isHorizontal ? p.x : p.y;
+          if (scalar >= axisStart - tol && scalar <= axisEnd + tol) {
+            breakpoints.add(Math.max(axisStart, Math.min(axisEnd, scalar)));
+          }
+        });
+      });
+
+      const sortedBreakpoints = Array.from(breakpoints).sort((m, n) => m - n);
+      const segments: Array<{ start: number; end: number; mid: number; len: number }> = [];
+      for (let i = 0; i < sortedBreakpoints.length - 1; i++) {
+        const start = sortedBreakpoints[i];
+        const end = sortedBreakpoints[i + 1];
+        const len = end - start;
+        if (len > 1.2) {
+          segments.push({ start, end, mid: (start + end) / 2, len });
+        }
+      }
+
+      // Prefer segments overlapping a shared interval; otherwise use segment nearest the edge midpoint.
+      let selectedSegment = segments.sort((s1, s2) => s2.len - s1.len)[0] || {
+        start: axisStart,
+        end: axisEnd,
+        mid: axisMid,
+        len: axisEnd - axisStart
+      };
+
+      if (sharedIntervals.length > 0) {
+        const bestShared = [...sharedIntervals].sort((i1, i2) => {
+          const l1 = i1.end - i1.start;
+          const l2 = i2.end - i2.start;
+          if (Math.abs(l1 - l2) > 0.001) return l2 - l1;
+          const c1 = (i1.start + i1.end) / 2;
+          const c2 = (i2.start + i2.end) / 2;
+          return Math.abs(c1 - axisMid) - Math.abs(c2 - axisMid);
+        })[0];
+
+        const overlapCandidates = segments
+          .map(seg => {
+            const oStart = Math.max(seg.start, bestShared.start);
+            const oEnd = Math.min(seg.end, bestShared.end);
+            const oLen = oEnd - oStart;
+            return oLen > 1.2
+              ? { start: oStart, end: oEnd, mid: (oStart + oEnd) / 2, len: oLen }
+              : null;
+          })
+          .filter(Boolean) as Array<{ start: number; end: number; mid: number; len: number }>;
+
+        if (overlapCandidates.length > 0) {
+          selectedSegment = overlapCandidates.sort((s1, s2) => {
+            if (Math.abs(s1.len - s2.len) > 0.001) return s2.len - s1.len;
+            return Math.abs(s1.mid - axisMid) - Math.abs(s2.mid - axisMid);
+          })[0];
+        }
+      } else if (segments.length > 0) {
+        selectedSegment = [...segments].sort((s1, s2) => Math.abs(s1.mid - axisMid) - Math.abs(s2.mid - axisMid))[0];
+      }
+
+      // Opening span is a percentage of the selected edge segment, centered on the segment midpoint.
+      const spanBase = selectedSegment.len > 0 ? selectedSegment.len : edgeLength;
+      const span = Math.max(2, spanBase * spanRatio);
+      const ux = dx / edgeLength;
+      const uy = dy / edgeLength;
+      const midScalar = selectedSegment.mid;
+      const midX = isHorizontal ? midScalar : lineCoord;
+      const midY = isHorizontal ? lineCoord : midScalar;
+      const half = span / 2;
+
+      return {
+        x1: midX - (ux * half),
+        y1: midY - (uy * half),
+        x2: midX + (ux * half),
+        y2: midY + (uy * half)
+      };
+    };
+
+    rooms.forEach((room, roomIndex) => {
       const roomX = room.position.x * scale;
       const roomY = room.position.y * scale;
       const roomWidth = room.size.width * scale;
@@ -274,84 +452,46 @@ export class TypeScriptSVGGenerator {
 
       // Puertas
       room.doors.forEach(door => {
-        const doorWidth = door.width * scale;
-        let doorX, doorY, doorX2, doorY2;
-        const doorClass = door.width >= 1.2 ? 'main-door' : 'door';
-        const strokeWidth = door.width >= 1.2 ? 5 : 4;
+        const isGarageDoor = room.type === 'garage' && door.width >= 2;
+        const doorClass = (!isGarageDoor && door.width >= 1.2) ? 'main-door' : 'door';
+        const strokeWidth = (!isGarageDoor && door.width >= 1.2) ? 5 : 4;
+        const normalizedEdge = String(door.position || 'west').toLowerCase();
+        const edgeLength = (normalizedEdge === 'north' || normalizedEdge === 'south')
+          ? roomWidth
+          : roomHeight;
 
-        switch (door.position) {
-          case 'north':
-            doorX = roomX + (roomWidth - doorWidth) / 2;
-            doorY = roomY;
-            doorX2 = doorX + doorWidth;
-            doorY2 = roomY;
-            break;
-          case 'south':
-            doorX = roomX + (roomWidth - doorWidth) / 2;
-            doorY = roomY + roomHeight;
-            doorX2 = doorX + doorWidth;
-            doorY2 = roomY + roomHeight;
-            break;
-          case 'east':
-            doorX = roomX + roomWidth;
-            doorY = roomY + (roomHeight - doorWidth) / 2;
-            doorX2 = roomX + roomWidth;
-            doorY2 = doorY + doorWidth;
-            break;
-          case 'west':
-          default:
-            doorX = roomX;
-            doorY = roomY + (roomHeight - doorWidth) / 2;
-            doorX2 = roomX;
-            doorY2 = doorY + doorWidth;
-            break;
-        }
+        // Puertas estándar conservan 25%; puertas anchas (cochera) usan proporción explícita del ancho solicitado.
+        const proportionalSpan = edgeLength > 0.01 ? (door.width * scale) / edgeLength : 0.25;
+        const spanRatio = door.width >= 2
+          ? Math.max(0.25, Math.min(0.85, proportionalSpan))
+          : 0.25;
 
-        const key = segmentKey(doorX, doorY, doorX2, doorY2, 'door');
+        const doorSegment = getOpeningSegmentFromEdge(
+          roomIndex,
+          normalizedEdge,
+          spanRatio
+        );
+
+        const key = segmentKey(doorSegment.x1, doorSegment.y1, doorSegment.x2, doorSegment.y2, 'door');
         if (!drawnSegments.has(key)) {
           drawnSegments.add(key);
-          elementsSVG += `    <line x1="${doorX}" y1="${doorY}" x2="${doorX2}" y2="${doorY2}" class="${doorClass}" stroke-width="${strokeWidth}" />
+          elementsSVG += `    <line x1="${doorSegment.x1}" y1="${doorSegment.y1}" x2="${doorSegment.x2}" y2="${doorSegment.y2}" class="${doorClass}" stroke-width="${strokeWidth}" />
       `;
         }
       });
 
       // Ventanas
       room.windows.forEach(window => {
-        const windowWidth = window.width * scale;
-        let windowX, windowY, windowX2, windowY2;
+        const windowSegment = getOpeningSegmentFromEdge(
+          roomIndex,
+          String(window.position || 'west').toLowerCase(),
+          0.30
+        );
 
-        switch (window.position) {
-          case 'north':
-            windowX = roomX + (roomWidth - windowWidth) / 2;
-            windowY = roomY;
-            windowX2 = windowX + windowWidth;
-            windowY2 = roomY;
-            break;
-          case 'south':
-            windowX = roomX + (roomWidth - windowWidth) / 2;
-            windowY = roomY + roomHeight;
-            windowX2 = windowX + windowWidth;
-            windowY2 = roomY + roomHeight;
-            break;
-          case 'east':
-            windowX = roomX + roomWidth;
-            windowY = roomY + (roomHeight - windowWidth) / 2;
-            windowX2 = roomX + roomWidth;
-            windowY2 = windowY + windowWidth;
-            break;
-          case 'west':
-          default:
-            windowX = roomX;
-            windowY = roomY + (roomHeight - windowWidth) / 2;
-            windowX2 = roomX;
-            windowY2 = windowY + windowWidth;
-            break;
-        }
-
-        const key = segmentKey(windowX, windowY, windowX2, windowY2, 'window');
+        const key = segmentKey(windowSegment.x1, windowSegment.y1, windowSegment.x2, windowSegment.y2, 'window');
         if (!drawnSegments.has(key)) {
           drawnSegments.add(key);
-          elementsSVG += `    <line x1="${windowX}" y1="${windowY}" x2="${windowX2}" y2="${windowY2}" class="window" stroke-width="3" />
+          elementsSVG += `    <line x1="${windowSegment.x1}" y1="${windowSegment.y1}" x2="${windowSegment.x2}" y2="${windowSegment.y2}" class="window" stroke-width="3" />
       `;
         }
       });
@@ -374,7 +514,7 @@ export class TypeScriptSVGGenerator {
 
       // Solo mostrar etiquetas si la habitación es lo suficientemente grande
       if (roomWidth > 40 && roomHeight > 30) {
-        const displayName = room.type === 'hallway' ? 'Circulación' : room.name;
+        const displayName = String(room.name || '').trim() || (room.type === 'hallway' ? 'Circulación' : room.type);
         // Nombre de la habitación
         labelsSVG += `    <text x="${centerX}" y="${centerY - 8}" class="room-label">${displayName}</text>
 `;
