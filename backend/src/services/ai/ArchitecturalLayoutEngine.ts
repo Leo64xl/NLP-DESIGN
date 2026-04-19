@@ -1,5 +1,6 @@
 import { Graph } from 'graphlib';
 import { PascalGenerator } from '../Pascal/PascalGenerator';
+import { SpacePartitioner } from '../../utils/SpacePartitioner'; 
 
 interface RoomRequirement {
   name: string;
@@ -152,11 +153,20 @@ export class ArchitecturalLayoutEngine {
       
       // 6. Crear grafo de conectividad
       const connectivityGraph = this.createDynamicConnectivityGraph(allRooms);
-      
+
       // 7. Resolver layout con restricciones
-      const layout = this.solveDynamicLayoutConstraints(allRooms, building, connectivityGraph);
-      console.log('✅ Layout resuelto:', layout.length, 'habitaciones colocadas');
-      
+      const partitionedSpaces = SpacePartitioner.generateLayout(allRooms, building.width, building.depth);
+
+      const layout: LayoutRoom[] = partitionedSpaces.map(room => ({
+        ...(room as DynamicRoom),
+        position: room.position!, // Las coordenadas perfectas calculadas por Treemap
+        size: room.size!,         // El ancho y alto perfecto sin decimales flotantes
+        rotation: 0,
+        doors: [],
+        windows: []
+      }));
+      console.log('✅ Layout particionado (Cero huecos):', layout.length, 'habitaciones colocadas');
+            
       // 8. Generar puertas y ventanas
       const layoutWithOpenings = this.generateDoorsAndWindows(layout, building);
       
