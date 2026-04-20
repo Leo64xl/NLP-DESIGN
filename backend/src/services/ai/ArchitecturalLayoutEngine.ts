@@ -565,9 +565,10 @@ export class ArchitecturalLayoutEngine {
       }
 
       // Puerta principal de acceso al exterior.
+      const mainDoorOrientation = this.getMainDoorOrientation(building);
       addDoor({
         position: [room.position.x + room.size.width / 2, room.position.y] as [number, number],
-        orientation: 'north',
+        orientation: mainDoorOrientation,
         type: 'main'
       });
       return doors;
@@ -583,6 +584,14 @@ export class ArchitecturalLayoutEngine {
     }
 
     return doors;
+  }
+
+  private static getMainDoorOrientation(building: any): 'north' | 'south' | 'east' | 'west' {
+    const orientation = String(building?.orientation || 'north').toLowerCase();
+    if (orientation === 'south') return 'south';
+    if (orientation === 'east') return 'east';
+    if (orientation === 'west') return 'west';
+    return 'north';
   }
 
   /**

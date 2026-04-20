@@ -1777,7 +1777,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       }
     }
 
-    // Puerta principal siempre en circulacion y sobre fachada exterior real.
+    // Puerta principal asignada por motor segun fachada cardinal y jerarquia espacial.
     const exteriorSidesForRoom = (room: NLPStructuralData['rooms'][number]): Array<'north' | 'south' | 'east' | 'west'> => {
       const sides: Array<'north' | 'south' | 'east' | 'west'> = [];
       if (room.position.y <= margin + eps) sides.push('north');
@@ -1792,8 +1792,21 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       return priority.find(side => availableSides.includes(side)) || availableSides[0] || 'north';
     };
 
-    const livingExteriorCandidates = otherRooms
-      .filter(room => isLivingRoom(room))
+    const isMainAccessPreferredRoom = (room: NLPStructuralData['rooms'][number]) => {
+      const sig = `${String(room.type).toLowerCase()} ${String(room.name || '').toLowerCase()} ${String(room.features || []).toLowerCase()}`;
+
+      if (room.type === 'bathroom' || room.type === 'storage') return false;
+      if (room.type === 'hallway') return true;
+      if (sig.includes('acceso') || sig.includes('recep') || sig.includes('lobby') || sig.includes('vestib')) return true;
+      if (isLivingRoom(room)) return true;
+      if (room.type === 'office') return true;
+
+      return room.type === 'dining_room';
+    };
+
+    const mainAccessCandidates = [...circulationRooms, ...otherRooms]
+      .filter(room => !isGarageRoom(room))
+      .filter(room => isMainAccessPreferredRoom(room))
       .map(room => {
         const sides = exteriorSidesForRoom(room);
         const preferredOrder = this.getOrientationPriority(orientation);
@@ -1802,15 +1815,22 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
           const score = idx >= 0 ? (5 - idx) : 1;
           return sum + score;
         }, 0) + (sides.length * 0.5);
-        return { room, sides, priority: sideScore + Math.min(room.area, 20) };
+
+        let typeScore = 0;
+        if (room.type === 'hallway') typeScore += 4;
+        if (isLivingRoom(room)) typeScore += 3;
+        if (room.type === 'dining_room') typeScore += 1;
+        if (room.type === 'office') typeScore += 1;
+
+        return { room, sides, priority: sideScore + typeScore + Math.min(room.area, 25) * 0.2 };
       })
       .filter(candidate => candidate.sides.length > 0)
       .sort((a, b) => b.priority - a.priority);
 
     let mainDoorOwner: NLPStructuralData['rooms'][number] | null = null;
     let mainDoorSide: 'north' | 'south' | 'east' | 'west' = 'north';
-    if (livingExteriorCandidates.length > 0) {
-      const selected = livingExteriorCandidates[0];
+    if (mainAccessCandidates.length > 0) {
+      const selected = mainAccessCandidates[0];
       const side = chooseMainDoorSide(selected.sides);
       selected.room.doors.push(makeDoor(selected.room, side, 1.3));
       mainDoorOwner = selected.room;
@@ -1845,6 +1865,30 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       });
     }
 
+    // Regla: nunca permitir ventanas en el mismo lado de una puerta principal o porton vehicular.
+    const stripWindowsOnAccessSides = (room: NLPStructuralData['rooms'][number]) => {
+      if (!room.windows || room.windows.length === 0) return;
+
+      const blockedSides = new Set(
+        room.doors
+          .filter(door => door.width >= 1.2)
+          .map(door => door.position as 'north' | 'south' | 'east' | 'west')
+      );
+
+      if (blockedSides.size === 0) return;
+
+      room.windows = room.windows.filter(
+        window => !blockedSides.has(window.position as 'north' | 'south' | 'east' | 'west')
+      );
+    };
+
+    for (const room of otherRooms) {
+      stripWindowsOnAccessSides(room);
+    }
+    for (const room of circulationRooms) {
+      stripWindowsOnAccessSides(room);
+    }
+
     // Ventanas de circulacion solo en laterales exteriores cuando aplique.
     for (const circulationRoom of circulationRooms) {
       const blockedSides = new Set(
@@ -1859,9 +1903,9 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       if (circulationRoom.position.y + circulationRoom.size.height >= maxY - eps && !blockedSides.has('south')) circulationRoom.windows.push(makeWindow(circulationRoom, 'south', 1.0, 1.1));
     }
 
-    // Garantía: solo Sala y Garage pueden tener puertas en fachadas exteriores.
-    for (const room of otherRooms) {
-      const allowExteriorDoor = isLivingRoom(room) || isGarageRoom(room);
+    // Garantía: solo el ambiente seleccionado por motor y la cochera pueden tener puertas exteriores.
+    for (const room of [...otherRooms, ...circulationRooms]) {
+      const allowExteriorDoor = (mainDoorOwner ? room === mainDoorOwner : false) || isGarageRoom(room);
       if (allowExteriorDoor) continue;
 
       const exteriorSides = new Set(exteriorSidesForRoom(room));
