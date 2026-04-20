@@ -17,6 +17,14 @@ interface RealOpening {
   isWindow: boolean;
 }
 
+interface WallSegment {
+  id: string;
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  length: number;
+  angle: number;
+}
+
 const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [processedData, setProcessedData] = useState<any>(null);
@@ -149,19 +157,59 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     const realOpenings: RealOpening[] = [];
     const seenOpenings = new Set<string>();
 
+    const normalizeAngle = (value: number): number => {
+      if (!Number.isFinite(value)) return 0;
+      if (Math.abs(value) > (Math.PI * 2 + 0.01)) return (value * Math.PI) / 180;
+      return value;
+    };
+
     const addOpening = (opening: RealOpening) => {
-      const key = `${opening.isWindow ? 'w' : 'd'}_${Math.round(opening.x * 100)}_${Math.round(opening.y * 100)}_${Math.round(opening.angle * 100)}`;
+      const key = `${opening.isWindow ? 'w' : 'd'}_${Math.round(opening.x * 100)}_${Math.round(opening.y * 100)}_${Math.round(opening.angle * 100)}_${Math.round(opening.width * 100)}_${Math.round(opening.height * 100)}`;
       if (seenOpenings.has(key)) return;
       seenOpenings.add(key);
       realOpenings.push(opening);
     };
 
     const toOpening = (room: any, item: any, isWindow: boolean): RealOpening | null => {
+      const directX = Number(item?.x);
+      const directY = Number(item?.y);
       const side = String(item?.position || '').toLowerCase();
       const width = Math.max(0.5, Number(item?.width) || (isWindow ? 1.2 : 0.9));
       const height = isWindow
         ? Math.max(0.6, Number(item?.height) || 1.1)
         : 2.1;
+
+      if (Number.isFinite(directX) && Number.isFinite(directY)) {
+        return {
+          x: directX,
+          y: directY,
+          width,
+          height,
+          elevation: isWindow ? 1.0 : 0,
+          angle: normalizeAngle(Number(item?.angle)),
+          isWindow,
+        };
+      }
+
+      const start = Array.isArray(item?.start) ? item.start : null;
+      const end = Array.isArray(item?.end) ? item.end : null;
+      if (start?.length === 2 && end?.length === 2) {
+        const sx = Number(start[0]);
+        const sy = Number(start[1]);
+        const ex = Number(end[0]);
+        const ey = Number(end[1]);
+        if ([sx, sy, ex, ey].every(Number.isFinite)) {
+          return {
+            x: (sx + ex) / 2,
+            y: (sy + ey) / 2,
+            width,
+            height,
+            elevation: isWindow ? 1.0 : 0,
+            angle: normalizeAngle(Math.atan2(ey - sy, ex - sx)),
+            isWindow,
+          };
+        }
+      }
 
       const x1 = room.position.x;
       const y1 = room.position.y;
@@ -238,6 +286,49 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       return Math.sqrt((px - (x1 + t * (x2 - x1)))**2 + (py - (y1 + t * (y2 - y1)))**2);
     };
 
+    const wallSegments: WallSegment[] = processedData.project.walls
+      .map((wall: any) => {
+        const start = nodes.get(wall.startNode);
+        const end = nodes.get(wall.endNode);
+        if (!start || !end) return null;
+
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        return {
+          id: wall.id,
+          start,
+          end,
+          length: Math.hypot(dx, dy),
+          angle: Math.atan2(dy, dx)
+        };
+      })
+      .filter((segment: WallSegment | null): segment is WallSegment => Boolean(segment));
+
+    const normalizeDeltaAngle = (a: number, b: number): number => {
+      let d = Math.abs(a - b) % Math.PI;
+      if (d > Math.PI / 2) d = Math.PI - d;
+      return Math.abs(d);
+    };
+
+    const openingByWall = new Map<string, RealOpening[]>();
+    realOpenings.forEach((opening) => {
+      let best: { wallId: string; score: number } | null = null;
+      for (const wall of wallSegments) {
+        const dist = distToSegment(opening.x, opening.y, wall.start.x, wall.start.y, wall.end.x, wall.end.y);
+        const anglePenalty = normalizeDeltaAngle(opening.angle, wall.angle);
+        const score = dist + (anglePenalty * 0.18);
+
+        if (!best || score < best.score) {
+          best = { wallId: wall.id, score };
+        }
+      }
+
+      if (!best) return;
+      const list = openingByWall.get(best.wallId) || [];
+      list.push(opening);
+      openingByWall.set(best.wallId, list);
+    });
+
     // 3. CONSTRUCCIÓN DE MUROS CON CSG
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9 });
     const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.8 });
@@ -263,38 +354,36 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       currentWallBrush.rotation.y = -angle; 
       currentWallBrush.updateMatrixWorld();
 
-      realOpenings.forEach(op => {
-        if (distToSegment(op.x, op.y, start.x, start.y, end.x, end.y) < 0.2) { 
-          
-          const drillBrush = new Brush(new THREE.BoxGeometry(op.width, op.height, wall.thickness * 2));
-          drillBrush.position.set(op.x, op.elevation + (op.height / 2), op.y);
-          drillBrush.rotation.y = -op.angle;
-          drillBrush.updateMatrixWorld();
+      const wallOpenings = openingByWall.get(wall.id) || [];
+      wallOpenings.forEach(op => {
+        const drillBrush = new Brush(new THREE.BoxGeometry(op.width, op.height, wall.thickness * 2));
+        drillBrush.position.set(op.x, op.elevation + (op.height / 2), op.y);
+        drillBrush.rotation.y = -op.angle;
+        drillBrush.updateMatrixWorld();
 
-          currentWallBrush = csgEvaluator.evaluate(currentWallBrush, drillBrush, SUBTRACTION);
+        currentWallBrush = csgEvaluator.evaluate(currentWallBrush, drillBrush, SUBTRACTION);
 
-          const frameBrush = new Brush(new THREE.BoxGeometry(op.width, op.height, wall.thickness + 0.05), frameMaterial);
-          const innerDrill = new Brush(new THREE.BoxGeometry(op.width - 0.08, op.isWindow ? op.height - 0.08 : op.height - 0.04, wall.thickness * 3));
-          
-          frameBrush.position.copy(drillBrush.position);
-          frameBrush.rotation.y = drillBrush.rotation.y;
-          frameBrush.updateMatrixWorld();
-          
-          innerDrill.position.copy(frameBrush.position);
-          if (!op.isWindow) innerDrill.position.y -= 0.02; 
-          innerDrill.rotation.y = frameBrush.rotation.y;
-          innerDrill.updateMatrixWorld();
+        const frameBrush = new Brush(new THREE.BoxGeometry(op.width, op.height, wall.thickness + 0.05), frameMaterial);
+        const innerDrill = new Brush(new THREE.BoxGeometry(op.width - 0.08, op.isWindow ? op.height - 0.08 : op.height - 0.04, wall.thickness * 3));
 
-          const frame = csgEvaluator.evaluate(frameBrush, innerDrill, SUBTRACTION);
-          frame.castShadow = true;
-          scene.add(frame);
+        frameBrush.position.copy(drillBrush.position);
+        frameBrush.rotation.y = drillBrush.rotation.y;
+        frameBrush.updateMatrixWorld();
 
-          if (op.isWindow) {
-            const glass = new THREE.Mesh(new THREE.BoxGeometry(op.width - 0.06, op.height - 0.1, 0.02), glassMaterial);
-            glass.position.copy(drillBrush.position);
-            glass.rotation.y = drillBrush.rotation.y;
-            scene.add(glass);
-          }
+        innerDrill.position.copy(frameBrush.position);
+        if (!op.isWindow) innerDrill.position.y -= 0.02;
+        innerDrill.rotation.y = frameBrush.rotation.y;
+        innerDrill.updateMatrixWorld();
+
+        const frame = csgEvaluator.evaluate(frameBrush, innerDrill, SUBTRACTION);
+        frame.castShadow = true;
+        scene.add(frame);
+
+        if (op.isWindow) {
+          const glass = new THREE.Mesh(new THREE.BoxGeometry(op.width - 0.06, op.height - 0.1, 0.02), glassMaterial);
+          glass.position.copy(drillBrush.position);
+          glass.rotation.y = drillBrush.rotation.y;
+          scene.add(glass);
         }
       });
 

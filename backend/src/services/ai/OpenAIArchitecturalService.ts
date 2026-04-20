@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
-import { SpacePartitioner } from '../../utils/SpacePartitioner';
+import {
+  adaptRoomsToSymmetricFootprint,
+  enforceMandatoryAdjacencyRules,
+  ensureHallwayRoom,
+  partitionRoomsInBounds,
+} from './layout/SharedRoomLayout';
 
 // 🤖 CONFIGURACIÓN DE OPENAI
 const openaiConfig = {
@@ -37,8 +42,21 @@ interface NLPStructuralData {
     area: number;
     position: { x: number; y: number };
     size: { width: number; height: number };
-    doors: Array<{ position: string; width: number }>;
-    windows: Array<{ position: string; width: number; height: number }>;
+    doors: Array<{
+      position: string;
+      width: number;
+      x?: number;
+      y?: number;
+      angle?: number;
+    }>;
+    windows: Array<{
+      position: string;
+      width: number;
+      height: number;
+      x?: number;
+      y?: number;
+      angle?: number;
+    }>;
     features: string[];
   }>;
   walls: Array<{
@@ -424,10 +442,11 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       Number.isFinite(data.metadata.totalArea) ? data.metadata.totalArea : 0,
       otherRooms.reduce((sum, room) => sum + Math.max(room.area, 3), 0)
     );
+    const isResidentialTypology = typology === 'house' || typology === 'apartment';
     const normalizedProgramArea = clamp(
       estimatedProgramArea,
       Math.max(20, otherRooms.length * 4.2),
-      footprintArea * 0.94
+      isResidentialTypology ? (footprintArea * 0.998) : (footprintArea * 0.94)
     );
 
     const circulationRatio = Math.min(
@@ -440,7 +459,6 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
     const minCirculationArea = minCirculationAreaByTypology[typology];
     const targetCirculationArea = Math.max(minCirculationArea, normalizedProgramArea * circulationRatio);
-    const isResidentialTypology = typology === 'house' || typology === 'apartment';
     const maxCirculationArea = isResidentialTypology ? (footprintArea * 0.17) : (footprintArea * 0.24);
     const minCirculationBound = isResidentialTypology ? 5.6 : 6.5;
 
@@ -1296,11 +1314,16 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
         });
 
       if (frontRooms.length > 0) {
+        const frontBandMin = 1.8;
+        const frontBandMax = Math.max(frontBandMin, usableSize - 1.8);
+
         if (orientation === 'north' || orientation === 'south') {
+          const targetDepth = frontRooms.reduce((maxDepth, room) => Math.max(maxDepth, room.size.height), frontBandMin);
+          const commonDepth = clamp(targetDepth, frontBandMin, frontBandMax);
           const totalPreferred = frontRooms.reduce((sum, room) => sum + Math.max(1.8, room.size.width), 0);
           const scale = totalPreferred > usableSize ? (usableSize / totalPreferred) : 1;
           let cursor = margin;
-          const facadeY = orientation === 'north' ? margin : maxY;
+          const facadeY = orientation === 'north' ? margin : (maxY - commonDepth);
 
           for (let i = 0; i < frontRooms.length; i++) {
             const room = frontRooms[i];
@@ -1313,15 +1336,18 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
               : clamp(target, 1.8, Math.max(1.8, remaining - reserve));
 
             room.size.width = width;
+            room.size.height = commonDepth;
             room.position.x = cursor;
-            room.position.y = orientation === 'north' ? facadeY : (facadeY - room.size.height);
+            room.position.y = facadeY;
             cursor += width;
           }
         } else {
+          const targetDepth = frontRooms.reduce((maxDepth, room) => Math.max(maxDepth, room.size.width), frontBandMin);
+          const commonDepth = clamp(targetDepth, frontBandMin, frontBandMax);
           const totalPreferred = frontRooms.reduce((sum, room) => sum + Math.max(1.8, room.size.height), 0);
           const scale = totalPreferred > usableSize ? (usableSize / totalPreferred) : 1;
           let cursor = margin;
-          const facadeX = orientation === 'west' ? margin : maxX;
+          const facadeX = orientation === 'west' ? margin : (maxX - commonDepth);
 
           for (let i = 0; i < frontRooms.length; i++) {
             const room = frontRooms[i];
@@ -1334,8 +1360,9 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
               : clamp(target, 1.8, Math.max(1.8, remaining - reserve));
 
             room.size.height = height;
+            room.size.width = commonDepth;
             room.position.y = cursor;
-            room.position.x = orientation === 'west' ? facadeX : (facadeX - room.size.width);
+            room.position.x = facadeX;
             cursor += height;
           }
         }
@@ -1385,27 +1412,25 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
         const interiorRooms = otherRooms.filter(room => !frontRooms.includes(room));
         if (interiorRooms.length > 0 && remW2 > 1.7 && remH2 > 1.7) {
-          const partitionInput = interiorRooms.map((room, index) => ({
-            name: `${room.name}__idx_${index}`,
-            type: room.type,
-            weight: Math.max(1, room.area)
-          }));
-
-          const partitioned = SpacePartitioner.generateLayout(partitionInput, remW2, remH2);
-          const byKey = new Map(partitioned.map(p => [p.name, p]));
-
-          interiorRooms.forEach((room, index) => {
-            const key = `${room.name}__idx_${index}`;
-            const part = byKey.get(key);
-            if (!part?.position || !part?.size) return;
-
-            room.position.x = remX2 + part.position.x;
-            room.position.y = remY2 + part.position.y;
-            room.size.width = Math.max(0.8, part.size.width);
-            room.size.height = Math.max(0.8, part.size.height);
-            room.area = Math.round(room.size.width * room.size.height * 100) / 100;
+          partitionRoomsInBounds(interiorRooms, {
+            x: remX2,
+            y: remY2,
+            width: remW2,
+            height: remH2,
+          }, {
+            weight: (room) => Math.max(1, room.area),
           });
         }
+      } else if (otherRooms.length > 0) {
+        // Fallback residencial: si no hay sala/cochera detectables, se llena todo el cuadrado.
+        partitionRoomsInBounds(otherRooms, {
+          x: margin,
+          y: margin,
+          width: usableSize,
+          height: usableSize,
+        }, {
+          weight: (room) => Math.max(1, room.area),
+        });
       }
     }
 
@@ -1519,14 +1544,104 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       room.area = Math.round(room.size.width * room.size.height * 100) / 100;
     }
 
+    // 4.5) Post-proceso unificado de conectividad lógica (pasillo + adyacencias obligatorias).
+    const connectedRooms = [...otherRooms, ...circulationRooms];
+
+    ensureHallwayRoom(connectedRooms, {
+      x: margin,
+      y: margin,
+      width: usableSize,
+      height: usableSize,
+    }, ({ area, position, size }) => ({
+      name: 'Pasillo Central',
+      type: 'hallway' as const,
+      area,
+      position,
+      size,
+      doors: [],
+      windows: [],
+      features: ['Conectividad interna']
+    }));
+
+    enforceMandatoryAdjacencyRules(connectedRooms, {
+      x: margin,
+      y: margin,
+      width: usableSize,
+      height: usableSize,
+    });
+
+    adaptRoomsToSymmetricFootprint(connectedRooms, {
+      x: margin,
+      y: margin,
+      width: usableSize,
+      height: usableSize,
+    }, {
+      roomCount: connectedRooms.length,
+      orientation,
+    });
+
+    enforceMandatoryAdjacencyRules(connectedRooms, {
+      x: margin,
+      y: margin,
+      width: usableSize,
+      height: usableSize,
+    });
+
+    otherRooms.length = 0;
+    circulationRooms.length = 0;
+    for (const room of connectedRooms) {
+      if (room.type === 'hallway') {
+        circulationRooms.push(room);
+      } else {
+        otherRooms.push(room);
+      }
+    }
+
     // 5) Puertas y ventanas detectadas desde backend (solo fachadas exteriores para ventanas).
     for (const room of [...otherRooms, ...circulationRooms]) {
       room.doors = [];
       room.windows = [];
     }
 
-    const makeDoor = (position: 'north' | 'south' | 'east' | 'west', width = 0.9) => ({ position, width });
-    const makeWindow = (position: 'north' | 'south' | 'east' | 'west', width = 1.2, height = 1.1) => ({ position, width, height });
+    const openingGeometry = (
+      room: NLPStructuralData['rooms'][number],
+      position: 'north' | 'south' | 'east' | 'west'
+    ) => {
+      const x1 = room.position.x;
+      const y1 = room.position.y;
+      const x2 = room.position.x + room.size.width;
+      const y2 = room.position.y + room.size.height;
+
+      if (position === 'north') {
+        return { x: (x1 + x2) / 2, y: y1, angle: 0 };
+      }
+      if (position === 'south') {
+        return { x: (x1 + x2) / 2, y: y2, angle: 0 };
+      }
+      if (position === 'east') {
+        return { x: x2, y: (y1 + y2) / 2, angle: Math.PI / 2 };
+      }
+      return { x: x1, y: (y1 + y2) / 2, angle: Math.PI / 2 };
+    };
+
+    const makeDoor = (
+      room: NLPStructuralData['rooms'][number],
+      position: 'north' | 'south' | 'east' | 'west',
+      width = 0.9
+    ) => {
+      const geom = openingGeometry(room, position);
+      return { position, width, x: geom.x, y: geom.y, angle: geom.angle };
+    };
+
+    const makeWindow = (
+      room: NLPStructuralData['rooms'][number],
+      position: 'north' | 'south' | 'east' | 'west',
+      width = 1.2,
+      height = 1.1
+    ) => {
+      const geom = openingGeometry(room, position);
+      return { position, width, height, x: geom.x, y: geom.y, angle: geom.angle };
+    };
 
     const eps = 0.06;
     const corridorCenters = circulationRooms.map(room => ({
@@ -1651,14 +1766,14 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     for (const room of otherRooms) {
       const garage = isGarageRoom(room);
 
-      room.doors.push(makeDoor(doorOrientationToCore(room), garage ? 1.0 : 0.9));
+      room.doors.push(makeDoor(room, doorOrientationToCore(room), garage ? 1.0 : 0.9));
 
       // Ventanas solo si el lado toca fachada exterior y nunca en cochera.
       if (!garage) {
-        if (room.position.y <= margin + eps) room.windows.push(makeWindow('north', 1.1));
-        if (room.position.y + room.size.height >= maxY - eps) room.windows.push(makeWindow('south', 1.1));
-        if (room.position.x <= margin + eps) room.windows.push(makeWindow('west', 1.1));
-        if (room.position.x + room.size.width >= maxX - eps) room.windows.push(makeWindow('east', 1.1));
+        if (room.position.y <= margin + eps) room.windows.push(makeWindow(room, 'north', 1.1));
+        if (room.position.y + room.size.height >= maxY - eps) room.windows.push(makeWindow(room, 'south', 1.1));
+        if (room.position.x <= margin + eps) room.windows.push(makeWindow(room, 'west', 1.1));
+        if (room.position.x + room.size.width >= maxX - eps) room.windows.push(makeWindow(room, 'east', 1.1));
       }
     }
 
@@ -1697,7 +1812,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
     if (livingExteriorCandidates.length > 0) {
       const selected = livingExteriorCandidates[0];
       const side = chooseMainDoorSide(selected.sides);
-      selected.room.doors.push(makeDoor(side, 1.3));
+      selected.room.doors.push(makeDoor(selected.room, side, 1.3));
       mainDoorOwner = selected.room;
       mainDoorSide = side;
     }
@@ -1721,7 +1836,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
         : room.size.height;
 
       const garageDoorWidth = Math.max(1.8, sideLength * 0.8);
-      room.doors.push(makeDoor(garageDoorSide, garageDoorWidth));
+      room.doors.push(makeDoor(room, garageDoorSide, garageDoorWidth));
       garageExteriorConnections.push({
         from: room.name,
         to: 'EXTERIOR',
@@ -1738,10 +1853,10 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
           .map(door => door.position as 'north' | 'south' | 'east' | 'west')
       );
 
-      if (circulationRoom.position.x <= margin + eps && !blockedSides.has('west')) circulationRoom.windows.push(makeWindow('west', 1.0, 1.1));
-      if (circulationRoom.position.x + circulationRoom.size.width >= maxX - eps && !blockedSides.has('east')) circulationRoom.windows.push(makeWindow('east', 1.0, 1.1));
-      if (circulationRoom.position.y <= margin + eps && !blockedSides.has('north')) circulationRoom.windows.push(makeWindow('north', 1.0, 1.1));
-      if (circulationRoom.position.y + circulationRoom.size.height >= maxY - eps && !blockedSides.has('south')) circulationRoom.windows.push(makeWindow('south', 1.0, 1.1));
+      if (circulationRoom.position.x <= margin + eps && !blockedSides.has('west')) circulationRoom.windows.push(makeWindow(circulationRoom, 'west', 1.0, 1.1));
+      if (circulationRoom.position.x + circulationRoom.size.width >= maxX - eps && !blockedSides.has('east')) circulationRoom.windows.push(makeWindow(circulationRoom, 'east', 1.0, 1.1));
+      if (circulationRoom.position.y <= margin + eps && !blockedSides.has('north')) circulationRoom.windows.push(makeWindow(circulationRoom, 'north', 1.0, 1.1));
+      if (circulationRoom.position.y + circulationRoom.size.height >= maxY - eps && !blockedSides.has('south')) circulationRoom.windows.push(makeWindow(circulationRoom, 'south', 1.0, 1.1));
     }
 
     // Garantía: solo Sala y Garage pueden tener puertas en fachadas exteriores.
@@ -1754,7 +1869,7 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
       if (room.doors.length === 0) {
         const interiorSide = (['west', 'east', 'north', 'south'] as Array<'west' | 'east' | 'north' | 'south'>)
           .find(side => !exteriorSides.has(side));
-        room.doors.push(makeDoor(interiorSide || 'west', 0.9));
+        room.doors.push(makeDoor(room, interiorSide || 'west', 0.9));
       }
     }
 

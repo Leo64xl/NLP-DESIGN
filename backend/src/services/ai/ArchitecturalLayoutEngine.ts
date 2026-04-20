@@ -1,6 +1,11 @@
 import { Graph } from 'graphlib';
 import { PascalGenerator } from '../Pascal/PascalGenerator';
-import { SpacePartitioner } from '../../utils/SpacePartitioner'; 
+import {
+  adaptRoomsToSymmetricFootprint,
+  enforceMandatoryAdjacencyRules,
+  ensureHallwayRoom,
+  partitionRoomsInBounds,
+} from './layout/SharedRoomLayout';
 
 interface RoomRequirement {
   name: string;
@@ -155,12 +160,51 @@ export class ArchitecturalLayoutEngine {
       const connectivityGraph = this.createDynamicConnectivityGraph(allRooms);
 
       // 7. Resolver layout con restricciones
-      const partitionedSpaces = SpacePartitioner.generateLayout(allRooms, building.width, building.depth);
+      const partitionSeed = allRooms.map((room) => ({
+        ...room,
+        position: { x: 0, y: 0 },
+        size: {
+          width: Math.max(room.width, 0.8),
+          height: Math.max(room.height, 0.8),
+        },
+      }));
+
+      const partitionedSpaces = partitionRoomsInBounds(partitionSeed, {
+        x: 0,
+        y: 0,
+        width: building.width,
+        height: building.depth,
+      }, {
+        weight: (room) => Math.max(room.area, 1),
+        placement: (room) => room.placement,
+      });
+
+      enforceMandatoryAdjacencyRules(partitionedSpaces, {
+        x: 0,
+        y: 0,
+        width: building.width,
+        height: building.depth,
+      });
+
+      adaptRoomsToSymmetricFootprint(partitionedSpaces, {
+        x: 0,
+        y: 0,
+        width: building.width,
+        height: building.depth,
+      }, {
+        roomCount: partitionedSpaces.length,
+        orientation: building.orientation || 'south',
+      });
+
+      enforceMandatoryAdjacencyRules(partitionedSpaces, {
+        x: 0,
+        y: 0,
+        width: building.width,
+        height: building.depth,
+      });
 
       const layout: LayoutRoom[] = partitionedSpaces.map(room => ({
-        ...(room as DynamicRoom),
-        position: room.position!, // Las coordenadas perfectas calculadas por Treemap
-        size: room.size!,         // El ancho y alto perfecto sin decimales flotantes
+        ...room,
         rotation: 0,
         doors: [],
         windows: []
@@ -1063,7 +1107,7 @@ export class ArchitecturalLayoutEngine {
 
     for (let i = 0; i < layout.length; i++) {
       for (let j = i + 1; j < layout.length; j++) {
-        if (this.roomsOverlapDynamic(layout[i], layout[j])) {
+        if (this.roomsIntersectStrict(layout[i], layout[j])) {
           warnings.push(`Solapamiento entre ${layout[i].name} y ${layout[j].name}`);
           valid = false;
         }
@@ -1099,8 +1143,85 @@ export class ArchitecturalLayoutEngine {
   }
 
   private static optimizeDynamicLayout(layout: LayoutRoom[], building: any): LayoutRoom[] {
-    // Implementación básica de optimización
-    return layout;
+    if (layout.length === 0) {
+      return layout;
+    }
+
+    const repacked = partitionRoomsInBounds(layout, {
+      x: 0,
+      y: 0,
+      width: building.width,
+      height: building.depth,
+    }, {
+      weight: (room) => Math.max(room.area, 1),
+      placement: (room) => room.placement,
+    });
+
+    ensureHallwayRoom(repacked, {
+      x: 0,
+      y: 0,
+      width: building.width,
+      height: building.depth,
+    }, ({ area, position, size }) => {
+      const seed = repacked[0];
+      const hallwayCount = repacked.filter((room) => room.type === 'circulation').length + 1;
+      return {
+        ...seed,
+        id: `suggested_circulation_opt_${Date.now()}`,
+        name: `Pasillo ${hallwayCount}`,
+        type: 'circulation',
+        area,
+        position,
+        size,
+        placement: 'connector',
+        adjacencies: ['*'],
+        specifications: ['Generado automaticamente para conectividad'],
+        source: 'suggested',
+        rotation: 0,
+        doors: [],
+        windows: [],
+      } as LayoutRoom;
+    });
+
+    enforceMandatoryAdjacencyRules(repacked, {
+      x: 0,
+      y: 0,
+      width: building.width,
+      height: building.depth,
+    });
+
+    adaptRoomsToSymmetricFootprint(repacked, {
+      x: 0,
+      y: 0,
+      width: building.width,
+      height: building.depth,
+    }, {
+      roomCount: repacked.length,
+      orientation: building.orientation || 'south',
+    });
+
+    enforceMandatoryAdjacencyRules(repacked, {
+      x: 0,
+      y: 0,
+      width: building.width,
+      height: building.depth,
+    });
+
+    return this.generateDoorsAndWindows(repacked, building);
+  }
+
+  private static roomsIntersectStrict(roomA: LayoutRoom, roomB: LayoutRoom): boolean {
+    const overlapX = Math.min(
+      roomA.position.x + roomA.size.width,
+      roomB.position.x + roomB.size.width,
+    ) - Math.max(roomA.position.x, roomB.position.x);
+
+    const overlapY = Math.min(
+      roomA.position.y + roomA.size.height,
+      roomB.position.y + roomB.size.height,
+    ) - Math.max(roomA.position.y, roomB.position.y);
+
+    return overlapX > 0.001 && overlapY > 0.001;
   }
 
   private static generateStructuralSVG(layout: LayoutRoom[], building: any): string {
