@@ -462,6 +462,40 @@ export class TypeScriptSVGGenerator {
       const roomWidth = room.size.width * scale;
       const roomHeight = room.size.height * scale;
 
+      const isInteriorEdge = (edge: string): boolean => {
+        const normalizedEdge = (edge || 'west').toLowerCase();
+        const rect = roomRects[roomIndex];
+        const tol = 1.2;
+
+        if (normalizedEdge === 'north' || normalizedEdge === 'south') {
+          const axisStart = rect.x;
+          const axisEnd = rect.right;
+          const lineCoord = normalizedEdge === 'north' ? rect.y : rect.bottom;
+          return roomRects.some((other, idx) => {
+            if (idx === roomIndex) return false;
+            const touching = normalizedEdge === 'north'
+              ? Math.abs(other.bottom - lineCoord) <= tol
+              : Math.abs(other.y - lineCoord) <= tol;
+            if (!touching) return false;
+            const overlap = Math.min(axisEnd, other.right) - Math.max(axisStart, other.x);
+            return overlap > 1.5;
+          });
+        }
+
+        const axisStart = rect.y;
+        const axisEnd = rect.bottom;
+        const lineCoord = normalizedEdge === 'west' ? rect.x : rect.right;
+        return roomRects.some((other, idx) => {
+          if (idx === roomIndex) return false;
+          const touching = normalizedEdge === 'west'
+            ? Math.abs(other.right - lineCoord) <= tol
+            : Math.abs(other.x - lineCoord) <= tol;
+          if (!touching) return false;
+          const overlap = Math.min(axisEnd, other.bottom) - Math.max(axisStart, other.y);
+          return overlap > 1.5;
+        });
+      };
+
       // Puertas
       room.doors.forEach(door => {
         const isGarageDoor = room.type === 'garage' && door.width >= 2;
@@ -472,9 +506,16 @@ export class TypeScriptSVGGenerator {
           ? roomWidth
           : roomHeight;
 
+        const declaredType = String((door as any)?.type || '').toLowerCase();
+        const isInteriorDoor = declaredType === 'interior' || isInteriorEdge(normalizedEdge);
+        const isSmallDoor = door.width >= 0 && door.width <= 0.7;
+
+        // Regla: puertas pequeñas (interiores o exteriores) ocupan 70% de la arista detectada desde el centro.
         // Puertas estándar conservan 25%; puertas anchas (cochera) usan proporción explícita del ancho solicitado.
         const proportionalSpan = edgeLength > 0.01 ? (door.width * scale) / edgeLength : 0.25;
-        const spanRatio = door.width >= 2
+        const spanRatio = isSmallDoor
+          ? 0.7
+          : door.width >= 2
           ? Math.max(0.25, Math.min(0.85, proportionalSpan))
           : 0.25;
 
