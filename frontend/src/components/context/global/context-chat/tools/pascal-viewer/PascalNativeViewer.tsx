@@ -15,6 +15,18 @@ interface RealOpening {
   elevation: number;
   angle: number;
   isWindow: boolean;
+  roomName?: string;
+  side?: 'north' | 'south' | 'east' | 'west';
+}
+
+interface ResolvedWallOpening {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  elevation: number;
+  angle: number;
+  isWindow: boolean;
 }
 
 interface WallSegment {
@@ -23,6 +35,7 @@ interface WallSegment {
   end: { x: number; y: number };
   length: number;
   angle: number;
+  rooms: string[];
 }
 
 const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) => {
@@ -156,11 +169,33 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     processedData.project.nodes.forEach((n: any) => nodes.set(n.id, n));
     const realOpenings: RealOpening[] = [];
     const seenOpenings = new Set<string>();
+    const rooms = Array.isArray(pascalData?.rooms) ? pascalData.rooms : [];
+    const roomByName = new Map<string, any>();
+    rooms.forEach((room: any) => {
+      roomByName.set(room.name, room);
+    });
+    const connections = Array.isArray(pascalData?.connections) ? pascalData.connections : [];
 
     const normalizeAngle = (value: number): number => {
       if (!Number.isFinite(value)) return 0;
       if (Math.abs(value) > (Math.PI * 2 + 0.01)) return (value * Math.PI) / 180;
       return value;
+    };
+
+    const parseSide = (value: any): 'north' | 'south' | 'east' | 'west' | undefined => {
+      const normalized = String(value || '').toLowerCase();
+      if (normalized === 'north' || normalized === 'south' || normalized === 'east' || normalized === 'west') {
+        return normalized;
+      }
+      return undefined;
+    };
+
+    const parseOrientationAngle = (orientation: any): number | undefined => {
+      const text = String(orientation || '').toLowerCase();
+      if (!text) return undefined;
+      if (text.includes('vertical') || text === 'east' || text === 'west') return Math.PI / 2;
+      if (text.includes('horizontal') || text === 'north' || text === 'south') return 0;
+      return undefined;
     };
 
     const addOpening = (opening: RealOpening) => {
@@ -170,14 +205,178 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       realOpenings.push(opening);
     };
 
+    const isNear = (a: number, b: number, tolerance = 0.22) => Math.abs(a - b) <= tolerance;
+
+    const getSharedBoundaryDoor = (
+      roomA: any,
+      roomB: any,
+      width: number
+    ): { x: number; y: number; angle: number; sideA: 'north' | 'south' | 'east' | 'west'; overlap: number } | null => {
+      const ax1 = roomA.position.x;
+      const ay1 = roomA.position.y;
+      const ax2 = roomA.position.x + roomA.size.width;
+      const ay2 = roomA.position.y + roomA.size.height;
+
+      const bx1 = roomB.position.x;
+      const by1 = roomB.position.y;
+      const bx2 = roomB.position.x + roomB.size.width;
+      const by2 = roomB.position.y + roomB.size.height;
+
+      const minOverlap = Math.max(0.35, width * 0.6);
+      const candidates: Array<{ x: number; y: number; angle: number; sideA: 'north' | 'south' | 'east' | 'west'; overlap: number }> = [];
+
+      if (isNear(ax2, bx1, 0.25)) {
+        const overlapStart = Math.max(ay1, by1);
+        const overlapEnd = Math.min(ay2, by2);
+        const overlap = overlapEnd - overlapStart;
+        if (overlap >= minOverlap) {
+          candidates.push({ x: ax2, y: (overlapStart + overlapEnd) / 2, angle: Math.PI / 2, sideA: 'east', overlap });
+        }
+      }
+
+      if (isNear(ax1, bx2, 0.25)) {
+        const overlapStart = Math.max(ay1, by1);
+        const overlapEnd = Math.min(ay2, by2);
+        const overlap = overlapEnd - overlapStart;
+        if (overlap >= minOverlap) {
+          candidates.push({ x: ax1, y: (overlapStart + overlapEnd) / 2, angle: Math.PI / 2, sideA: 'west', overlap });
+        }
+      }
+
+      if (isNear(ay2, by1, 0.25)) {
+        const overlapStart = Math.max(ax1, bx1);
+        const overlapEnd = Math.min(ax2, bx2);
+        const overlap = overlapEnd - overlapStart;
+        if (overlap >= minOverlap) {
+          candidates.push({ x: (overlapStart + overlapEnd) / 2, y: ay2, angle: 0, sideA: 'south', overlap });
+        }
+      }
+
+      if (isNear(ay1, by2, 0.25)) {
+        const overlapStart = Math.max(ax1, bx1);
+        const overlapEnd = Math.min(ax2, bx2);
+        const overlap = overlapEnd - overlapStart;
+        if (overlap >= minOverlap) {
+          candidates.push({ x: (overlapStart + overlapEnd) / 2, y: ay1, angle: 0, sideA: 'north', overlap });
+        }
+      }
+
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => b.overlap - a.overlap);
+      return candidates[0];
+    };
+
+    const findSharedBoundaryCenter = (
+      room: any,
+      side: 'north' | 'south' | 'east' | 'west',
+      width: number
+    ): { x: number; y: number } | null => {
+      const roomName = String(room?.name || '');
+      const candidates = connections
+        .filter((c: any) => String(c?.type || '').toLowerCase() !== 'window')
+        .filter((c: any) => c?.from === roomName || c?.to === roomName)
+        .map((c: any) => (c.from === roomName ? c.to : c.from));
+
+      const x1 = room.position.x;
+      const y1 = room.position.y;
+      const x2 = room.position.x + room.size.width;
+      const y2 = room.position.y + room.size.height;
+
+      type SharedCandidate = { centerX: number; centerY: number; overlap: number };
+      const shared: SharedCandidate[] = [];
+
+      rooms.forEach((other: any) => {
+        if (!other || other.name === roomName) return;
+        if (candidates.length > 0 && !candidates.includes(other.name)) return;
+
+        const ox1 = other.position.x;
+        const oy1 = other.position.y;
+        const ox2 = other.position.x + other.size.width;
+        const oy2 = other.position.y + other.size.height;
+
+        if (side === 'north' && isNear(y1, oy2, 0.25)) {
+          const overlapStart = Math.max(x1, ox1);
+          const overlapEnd = Math.min(x2, ox2);
+          const overlap = overlapEnd - overlapStart;
+          if (overlap >= Math.max(0.4, width * 0.7)) {
+            shared.push({ centerX: (overlapStart + overlapEnd) / 2, centerY: y1, overlap });
+          }
+        }
+
+        if (side === 'south' && isNear(y2, oy1, 0.25)) {
+          const overlapStart = Math.max(x1, ox1);
+          const overlapEnd = Math.min(x2, ox2);
+          const overlap = overlapEnd - overlapStart;
+          if (overlap >= Math.max(0.4, width * 0.7)) {
+            shared.push({ centerX: (overlapStart + overlapEnd) / 2, centerY: y2, overlap });
+          }
+        }
+
+        if (side === 'east' && isNear(x2, ox1, 0.25)) {
+          const overlapStart = Math.max(y1, oy1);
+          const overlapEnd = Math.min(y2, oy2);
+          const overlap = overlapEnd - overlapStart;
+          if (overlap >= Math.max(0.4, width * 0.7)) {
+            shared.push({ centerX: x2, centerY: (overlapStart + overlapEnd) / 2, overlap });
+          }
+        }
+
+        if (side === 'west' && isNear(x1, ox2, 0.25)) {
+          const overlapStart = Math.max(y1, oy1);
+          const overlapEnd = Math.min(y2, oy2);
+          const overlap = overlapEnd - overlapStart;
+          if (overlap >= Math.max(0.4, width * 0.7)) {
+            shared.push({ centerX: x1, centerY: (overlapStart + overlapEnd) / 2, overlap });
+          }
+        }
+      });
+
+      if (shared.length === 0) return null;
+      shared.sort((a, b) => b.overlap - a.overlap);
+      return { x: shared[0].centerX, y: shared[0].centerY };
+    };
+
+    const hasAdjacentRoomOnSide = (
+      room: any,
+      side: 'north' | 'south' | 'east' | 'west',
+      width: number
+    ): boolean => {
+      for (const other of rooms) {
+        if (!other || other.name === room.name) continue;
+        const shared = getSharedBoundaryDoor(room, other, width);
+        if (shared && shared.sideA === side) return true;
+      }
+      return false;
+    };
+
     const toOpening = (room: any, item: any, isWindow: boolean): RealOpening | null => {
       const directX = Number(item?.x);
       const directY = Number(item?.y);
-      const side = String(item?.position || '').toLowerCase();
-      const width = Math.max(0.5, Number(item?.width) || (isWindow ? 1.2 : 0.9));
+      const side = parseSide(item?.position);
+      const orientationAngle = parseOrientationAngle(item?.orientation);
+      const width = Math.max(0.2, Number(item?.width) || (isWindow ? 1.2 : 0.9));
       const height = isWindow
         ? Math.max(0.6, Number(item?.height) || 1.1)
         : 2.1;
+
+      const tuplePosition = Array.isArray(item?.position) ? item.position : null;
+      if (tuplePosition?.length === 2) {
+        const px = Number(tuplePosition[0]);
+        const py = Number(tuplePosition[1]);
+        if (Number.isFinite(px) && Number.isFinite(py)) {
+          return {
+            x: px,
+            y: py,
+            width,
+            height,
+            elevation: isWindow ? 1.0 : 0,
+            angle: normalizeAngle(Number(item?.angle)) || orientationAngle || 0,
+            isWindow,
+            roomName: room.name,
+            side,
+          };
+        }
+      }
 
       if (Number.isFinite(directX) && Number.isFinite(directY)) {
         return {
@@ -186,8 +385,10 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
           width,
           height,
           elevation: isWindow ? 1.0 : 0,
-          angle: normalizeAngle(Number(item?.angle)),
+          angle: normalizeAngle(Number(item?.angle)) || orientationAngle || 0,
           isWindow,
+          roomName: room.name,
+          side,
         };
       }
 
@@ -207,6 +408,8 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
             elevation: isWindow ? 1.0 : 0,
             angle: normalizeAngle(Math.atan2(ey - sy, ex - sx)),
             isWindow,
+            roomName: room.name,
+            side,
           };
         }
       }
@@ -217,58 +420,83 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       const y2 = room.position.y + room.size.height;
 
       if (side === 'north') {
+        const shared = findSharedBoundaryCenter(room, 'north', width);
         return {
-          x: (x1 + x2) / 2,
-          y: y1,
+          x: shared?.x ?? (x1 + x2) / 2,
+          y: shared?.y ?? y1,
           width,
           height,
           elevation: isWindow ? 1.0 : 0,
           angle: 0,
           isWindow,
+          roomName: room.name,
+          side,
         };
       }
 
       if (side === 'south') {
+        const shared = findSharedBoundaryCenter(room, 'south', width);
         return {
-          x: (x1 + x2) / 2,
-          y: y2,
+          x: shared?.x ?? (x1 + x2) / 2,
+          y: shared?.y ?? y2,
           width,
           height,
           elevation: isWindow ? 1.0 : 0,
           angle: 0,
           isWindow,
+          roomName: room.name,
+          side,
         };
       }
 
       if (side === 'east') {
+        const shared = findSharedBoundaryCenter(room, 'east', width);
         return {
-          x: x2,
-          y: (y1 + y2) / 2,
+          x: shared?.x ?? x2,
+          y: shared?.y ?? (y1 + y2) / 2,
           width,
           height,
           elevation: isWindow ? 1.0 : 0,
           angle: Math.PI / 2,
           isWindow,
+          roomName: room.name,
+          side,
         };
       }
 
       if (side === 'west') {
+        const shared = findSharedBoundaryCenter(room, 'west', width);
         return {
-          x: x1,
-          y: (y1 + y2) / 2,
+          x: shared?.x ?? x1,
+          y: shared?.y ?? (y1 + y2) / 2,
           width,
           height,
           elevation: isWindow ? 1.0 : 0,
           angle: Math.PI / 2,
           isWindow,
+          roomName: room.name,
+          side,
         };
       }
 
       return null;
     };
 
-    pascalData.rooms.forEach((room: any) => {
+    rooms.forEach((room: any) => {
       (room?.doors || []).forEach((door: any) => {
+        const side = parseSide(door?.position);
+        const width = Math.max(0.2, Number(door?.width) || 0.9);
+        const declaredType = String(door?.type || '').toLowerCase();
+
+        const shouldSkipAsInterior = Boolean(
+          declaredType === 'interior' ||
+          (side && hasAdjacentRoomOnSide(room, side, width))
+        );
+
+        if (shouldSkipAsInterior) {
+          return;
+        }
+
         const op = toOpening(room, door, false);
         if (op) addOpening(op);
       });
@@ -299,10 +527,25 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
           start,
           end,
           length: Math.hypot(dx, dy),
-          angle: Math.atan2(dy, dx)
+          angle: Math.atan2(dy, dx),
+          rooms: Array.isArray(wall.rooms) ? wall.rooms : [],
         };
       })
       .filter((segment: WallSegment | null): segment is WallSegment => Boolean(segment));
+
+    const sideMatchesWall = (room: any, side: 'north' | 'south' | 'east' | 'west', wall: WallSegment): boolean => {
+      const x1 = room.position.x;
+      const y1 = room.position.y;
+      const x2 = room.position.x + room.size.width;
+      const y2 = room.position.y + room.size.height;
+      const horizontal = Math.abs(wall.start.y - wall.end.y) <= 0.06;
+      const vertical = Math.abs(wall.start.x - wall.end.x) <= 0.06;
+
+      if (side === 'north') return horizontal && isNear(wall.start.y, y1) && isNear(wall.end.y, y1);
+      if (side === 'south') return horizontal && isNear(wall.start.y, y2) && isNear(wall.end.y, y2);
+      if (side === 'east') return vertical && isNear(wall.start.x, x2) && isNear(wall.end.x, x2);
+      return vertical && isNear(wall.start.x, x1) && isNear(wall.end.x, x1);
+    };
 
     const normalizeDeltaAngle = (a: number, b: number): number => {
       let d = Math.abs(a - b) % Math.PI;
@@ -312,8 +555,19 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
 
     const openingByWall = new Map<string, RealOpening[]>();
     realOpenings.forEach((opening) => {
+      const room = opening.roomName ? roomByName.get(opening.roomName) : undefined;
+      const roomWalls = room
+        ? wallSegments.filter((w) => w.rooms.includes(opening.roomName as string))
+        : wallSegments;
+
+      const sideFilteredWalls = opening.side && room
+        ? roomWalls.filter((w) => sideMatchesWall(room, opening.side as 'north' | 'south' | 'east' | 'west', w))
+        : roomWalls;
+
+      const candidateWalls = sideFilteredWalls.length > 0 ? sideFilteredWalls : (roomWalls.length > 0 ? roomWalls : wallSegments);
+
       let best: { wallId: string; score: number } | null = null;
-      for (const wall of wallSegments) {
+      for (const wall of candidateWalls) {
         const dist = distToSegment(opening.x, opening.y, wall.start.x, wall.start.y, wall.end.x, wall.end.y);
         const anglePenalty = normalizeDeltaAngle(opening.angle, wall.angle);
         const score = dist + (anglePenalty * 0.18);
@@ -328,6 +582,27 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       list.push(opening);
       openingByWall.set(best.wallId, list);
     });
+
+    const projectPointToSegment = (
+      px: number,
+      py: number,
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number
+    ): { x: number; y: number; t: number } => {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const l2 = dx * dx + dy * dy;
+      if (l2 === 0) return { x: x1, y: y1, t: 0 };
+      const rawT = ((px - x1) * dx + (py - y1) * dy) / l2;
+      const t = Math.max(0, Math.min(1, rawT));
+      return {
+        x: x1 + t * dx,
+        y: y1 + t * dy,
+        t,
+      };
+    };
 
     // 3. CONSTRUCCIÓN DE MUROS CON CSG
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9 });
@@ -355,7 +630,25 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       currentWallBrush.updateMatrixWorld();
 
       const wallOpenings = openingByWall.get(wall.id) || [];
-      wallOpenings.forEach(op => {
+      const resolvedOpenings: ResolvedWallOpening[] = wallOpenings.map((op) => {
+        const projected = projectPointToSegment(op.x, op.y, start.x, start.y, end.x, end.y);
+        const centerX = start.x + dx / 2;
+        const centerY = start.y + dy / 2;
+        const isWindow = op.isWindow;
+        const targetWidth = isWindow ? (length * 0.3) : op.width;
+        const safeWidth = Math.min(Math.max(0.25, targetWidth), Math.max(0.25, length - 0.08));
+        return {
+          x: isWindow ? centerX : projected.x,
+          y: isWindow ? centerY : projected.y,
+          width: safeWidth,
+          height: op.height,
+          elevation: op.elevation,
+          angle,
+          isWindow,
+        };
+      });
+
+      resolvedOpenings.forEach(op => {
         const drillBrush = new Brush(new THREE.BoxGeometry(op.width, op.height, wall.thickness * 2));
         drillBrush.position.set(op.x, op.elevation + (op.height / 2), op.y);
         drillBrush.rotation.y = -op.angle;

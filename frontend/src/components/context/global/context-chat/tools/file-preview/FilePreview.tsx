@@ -31,6 +31,11 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file, onClose }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [file.url, file.type]);
+
   // 🔧 EFECTOS
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -87,6 +92,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file, onClose }) => {
       case 'pdf': return <FileText size={64} />;
       case 'dwg': return <Settings size={64} />;
       case 'obj': return <Box size={64} />;
+      case 'svg': return <ImageIcon size={64} />;
       case 'jpg': return <ImageIcon size={64} />;
       default: return <FileText size={64} />;
     }
@@ -114,7 +120,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file, onClose }) => {
     }
 
     // 🖼️ PREVIEW DE IMÁGENES (JPG, PNG)
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(file.type.toLowerCase())) {
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(file.type.toLowerCase())) {
       return (
         <div className="image-preview-container">
           {!imageLoaded && !imageError && (
@@ -203,7 +209,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file, onClose }) => {
 
           <div className="preview-actions">
             {/* 🔍 CONTROLES DE ZOOM */}
-            {['jpg', 'jpeg', 'png', 'pdf'].includes(file.type.toLowerCase()) && file.status === 'ready' && (
+            {['jpg', 'jpeg', 'png', 'svg', 'pdf'].includes(file.type.toLowerCase()) && file.status === 'ready' && (
               <>
                 <button onClick={handleZoomOut} className="action-btn" title="Alejar">
                   <ZoomOut size={18} />
