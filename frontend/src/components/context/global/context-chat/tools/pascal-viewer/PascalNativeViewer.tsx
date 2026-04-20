@@ -15,6 +15,7 @@ interface RealOpening {
   elevation: number;
   angle: number;
   isWindow: boolean;
+  isInteriorDoor?: boolean;
   roomName?: string;
   side?: 'north' | 'south' | 'east' | 'west';
 }
@@ -27,6 +28,7 @@ interface ResolvedWallOpening {
   elevation: number;
   angle: number;
   isWindow: boolean;
+  isInteriorDoor?: boolean;
 }
 
 interface WallSegment {
@@ -482,6 +484,32 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       return null;
     };
 
+    connections.forEach((conn: any) => {
+      const type = String(conn?.type || '').toLowerCase();
+      if (type !== 'door' && type !== 'opening') return;
+
+      const fromRoom = roomByName.get(conn?.from);
+      const toRoom = roomByName.get(conn?.to);
+      if (!fromRoom || !toRoom) return;
+
+      const refWidth = Math.max(0.2, Number(conn?.width) || 0.9);
+      const shared = getSharedBoundaryDoor(fromRoom, toRoom, refWidth);
+      if (!shared) return;
+
+      addOpening({
+        x: shared.x,
+        y: shared.y,
+        width: refWidth,
+        height: 2.1,
+        elevation: 0,
+        angle: shared.angle,
+        isWindow: false,
+        isInteriorDoor: true,
+        roomName: fromRoom.name,
+        side: shared.sideA,
+      });
+    });
+
     rooms.forEach((room: any) => {
       (room?.doors || []).forEach((door: any) => {
         const side = parseSide(door?.position);
@@ -504,6 +532,270 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       (room?.windows || []).forEach((window: any) => {
         const op = toOpening(room, window, true);
         if (op) addOpening(op);
+      });
+    });
+
+    // Fuente de verdad final: replicar exactamente la segmentacion del SVG backend.
+    // Se recalculan todas las aberturas para evitar heuristicas inconsistentes en 3D.
+    realOpenings.length = 0;
+    seenOpenings.clear();
+
+    const bounds = rooms.reduce(
+      (acc: { minX: number; minY: number; maxX: number; maxY: number }, room: any) => {
+        const x1 = Number(room?.position?.x) || 0;
+        const y1 = Number(room?.position?.y) || 0;
+        const x2 = x1 + (Number(room?.size?.width) || 0);
+        const y2 = y1 + (Number(room?.size?.height) || 0);
+        return {
+          minX: Math.min(acc.minX, x1),
+          minY: Math.min(acc.minY, y1),
+          maxX: Math.max(acc.maxX, x2),
+          maxY: Math.max(acc.maxY, y2),
+        };
+      },
+      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+    );
+
+    const extentWidth = Math.max(0.01, bounds.maxX - bounds.minX);
+    const extentHeight = Math.max(0.01, bounds.maxY - bounds.minY);
+    const maxRealDimension = Math.max(extentWidth, extentHeight);
+    const svgLikeScale = 900 / maxRealDimension;
+
+    type SvgRoomRect = { x: number; y: number; width: number; height: number; right: number; bottom: number };
+
+    const roomRects: SvgRoomRect[] = rooms.map((room: any) => {
+      const x = (Number(room?.position?.x) || 0) * svgLikeScale;
+      const y = (Number(room?.position?.y) || 0) * svgLikeScale;
+      const width = (Number(room?.size?.width) || 0) * svgLikeScale;
+      const height = (Number(room?.size?.height) || 0) * svgLikeScale;
+      return {
+        x,
+        y,
+        width,
+        height,
+        right: x + width,
+        bottom: y + height,
+      };
+    });
+
+    const drawnSegments = new Set<string>();
+    const segmentKey = (x1: number, y1: number, x2: number, y2: number, kind: 'door' | 'window') => {
+      const ax = Math.round(Math.min(x1, x2) * 100);
+      const ay = Math.round(Math.min(y1, y2) * 100);
+      const bx = Math.round(Math.max(x1, x2) * 100);
+      const by = Math.round(Math.max(y1, y2) * 100);
+      return `${kind}_${ax}_${ay}_${bx}_${by}`;
+    };
+
+    const getOpeningSegmentFromEdge = (
+      roomIndex: number,
+      edge: string,
+      spanRatio: number
+    ): { x1: number; y1: number; x2: number; y2: number } => {
+      const room = roomRects[roomIndex];
+      const roomX = room.x;
+      const roomY = room.y;
+      const roomWidth = room.width;
+      const roomHeight = room.height;
+
+      const vertices = {
+        nw: { x: roomX, y: roomY },
+        ne: { x: roomX + roomWidth, y: roomY },
+        se: { x: roomX + roomWidth, y: roomY + roomHeight },
+        sw: { x: roomX, y: roomY + roomHeight },
+      };
+
+      const edgeVertices: Record<string, [{ x: number; y: number }, { x: number; y: number }]> = {
+        north: [vertices.nw, vertices.ne],
+        south: [vertices.sw, vertices.se],
+        east: [vertices.ne, vertices.se],
+        west: [vertices.nw, vertices.sw],
+      };
+
+      const normalizedEdge = (edge || 'west').toLowerCase();
+      const [a, b] = edgeVertices[normalizedEdge] || edgeVertices.west;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const edgeLength = Math.max(0.01, Math.hypot(dx, dy));
+
+      const isHorizontal = Math.abs(dy) < 1e-6;
+      const axisStart = isHorizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+      const axisEnd = isHorizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+      const axisMid = (axisStart + axisEnd) / 2;
+      const lineCoord = isHorizontal ? a.y : a.x;
+      const tol = 1.2;
+
+      const sharedIntervals: Array<{ start: number; end: number }> = [];
+      roomRects.forEach((other: SvgRoomRect, idx: number) => {
+        if (idx === roomIndex) return;
+
+        if (normalizedEdge === 'north' && Math.abs(other.bottom - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.x);
+          const end = Math.min(axisEnd, other.right);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+        if (normalizedEdge === 'south' && Math.abs(other.y - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.x);
+          const end = Math.min(axisEnd, other.right);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+        if (normalizedEdge === 'west' && Math.abs(other.right - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.y);
+          const end = Math.min(axisEnd, other.bottom);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+        if (normalizedEdge === 'east' && Math.abs(other.x - lineCoord) <= tol) {
+          const start = Math.max(axisStart, other.y);
+          const end = Math.min(axisEnd, other.bottom);
+          if (end - start > 1.5) sharedIntervals.push({ start, end });
+        }
+      });
+
+      const breakpoints = new Set<number>([axisStart, axisEnd]);
+      roomRects.forEach((rect: SvgRoomRect) => {
+        const v = [
+          { x: rect.x, y: rect.y },
+          { x: rect.right, y: rect.y },
+          { x: rect.right, y: rect.bottom },
+          { x: rect.x, y: rect.bottom },
+        ];
+
+        v.forEach((p) => {
+          const aligned = isHorizontal ? Math.abs(p.y - lineCoord) <= tol : Math.abs(p.x - lineCoord) <= tol;
+          if (!aligned) return;
+          const scalar = isHorizontal ? p.x : p.y;
+          if (scalar >= axisStart - tol && scalar <= axisEnd + tol) {
+            breakpoints.add(Math.max(axisStart, Math.min(axisEnd, scalar)));
+          }
+        });
+      });
+
+      const sortedBreakpoints = Array.from(breakpoints).sort((m, n) => m - n);
+      const segments: Array<{ start: number; end: number; mid: number; len: number }> = [];
+      for (let i = 0; i < sortedBreakpoints.length - 1; i++) {
+        const start = sortedBreakpoints[i];
+        const end = sortedBreakpoints[i + 1];
+        const len = end - start;
+        if (len > 1.2) segments.push({ start, end, mid: (start + end) / 2, len });
+      }
+
+      let selectedSegment = segments.sort((s1, s2) => s2.len - s1.len)[0] || {
+        start: axisStart,
+        end: axisEnd,
+        mid: axisMid,
+        len: axisEnd - axisStart,
+      };
+
+      if (sharedIntervals.length > 0) {
+        const bestShared = [...sharedIntervals].sort((i1, i2) => {
+          const l1 = i1.end - i1.start;
+          const l2 = i2.end - i2.start;
+          if (Math.abs(l1 - l2) > 0.001) return l2 - l1;
+          const c1 = (i1.start + i1.end) / 2;
+          const c2 = (i2.start + i2.end) / 2;
+          return Math.abs(c1 - axisMid) - Math.abs(c2 - axisMid);
+        })[0];
+
+        const overlapCandidates = segments
+          .map(seg => {
+            const oStart = Math.max(seg.start, bestShared.start);
+            const oEnd = Math.min(seg.end, bestShared.end);
+            const oLen = oEnd - oStart;
+            return oLen > 1.2 ? { start: oStart, end: oEnd, mid: (oStart + oEnd) / 2, len: oLen } : null;
+          })
+          .filter(Boolean) as Array<{ start: number; end: number; mid: number; len: number }>;
+
+        if (overlapCandidates.length > 0) {
+          selectedSegment = overlapCandidates.sort((s1, s2) => {
+            if (Math.abs(s1.len - s2.len) > 0.001) return s2.len - s1.len;
+            return Math.abs(s1.mid - axisMid) - Math.abs(s2.mid - axisMid);
+          })[0];
+        }
+      } else if (segments.length > 0) {
+        selectedSegment = [...segments].sort((s1, s2) => Math.abs(s1.mid - axisMid) - Math.abs(s2.mid - axisMid))[0];
+      }
+
+      const spanBase = selectedSegment.len > 0 ? selectedSegment.len : edgeLength;
+      const span = Math.max(2, spanBase * spanRatio);
+      const ux = dx / edgeLength;
+      const uy = dy / edgeLength;
+      const midScalar = selectedSegment.mid;
+      const midX = isHorizontal ? midScalar : lineCoord;
+      const midY = isHorizontal ? lineCoord : midScalar;
+      const half = span / 2;
+
+      return {
+        x1: midX - (ux * half),
+        y1: midY - (uy * half),
+        x2: midX + (ux * half),
+        y2: midY + (uy * half),
+      };
+    };
+
+    const addSegmentOpening = (
+      room: any,
+      side: string,
+      spanRatio: number,
+      isWindow: boolean,
+      isInteriorDoor: boolean,
+      dedupeKind: 'door' | 'window',
+      height: number,
+      elevation: number
+    ) => {
+      const roomIndex = rooms.findIndex((r: any) => r?.name === room?.name);
+      if (roomIndex < 0) return;
+
+      const seg = getOpeningSegmentFromEdge(roomIndex, String(side || 'west').toLowerCase(), spanRatio);
+      const key = segmentKey(seg.x1, seg.y1, seg.x2, seg.y2, dedupeKind);
+      if (drawnSegments.has(key)) return;
+      drawnSegments.add(key);
+
+      const x1 = seg.x1 / svgLikeScale;
+      const y1 = seg.y1 / svgLikeScale;
+      const x2 = seg.x2 / svgLikeScale;
+      const y2 = seg.y2 / svgLikeScale;
+
+      addOpening({
+        x: (x1 + x2) / 2,
+        y: (y1 + y2) / 2,
+        width: Math.max(0.25, Math.hypot(x2 - x1, y2 - y1)),
+        height,
+        elevation,
+        angle: Math.atan2(y2 - y1, x2 - x1),
+        isWindow,
+        isInteriorDoor,
+        roomName: room.name,
+        side: parseSide(side),
+      });
+    };
+
+    rooms.forEach((room: any) => {
+      const doors = Array.isArray(room?.doors) ? room.doors : [];
+      doors.forEach((door: any) => {
+        const side = String(door?.position || 'west').toLowerCase();
+        const roomWidth = Number(room?.size?.width) || 0;
+        const roomHeight = Number(room?.size?.height) || 0;
+        const edgeLength = (side === 'north' || side === 'south') ? roomWidth : roomHeight;
+        const doorWidth = Math.max(0.2, Number(door?.width) || 0.9);
+        const proportionalSpan = edgeLength > 0.01 ? doorWidth / edgeLength : 0.25;
+        const spanRatio = doorWidth >= 2
+          ? Math.max(0.25, Math.min(0.85, proportionalSpan))
+          : 0.25;
+
+        const declaredType = String(door?.type || '').toLowerCase();
+        const interiorByAdjacency = Boolean(
+          parseSide(side) && hasAdjacentRoomOnSide(room, parseSide(side) as 'north' | 'south' | 'east' | 'west', doorWidth)
+        );
+        const isInteriorDoor = declaredType === 'interior' || interiorByAdjacency;
+
+        addSegmentOpening(room, side, spanRatio, false, isInteriorDoor, 'door', 2.1, 0);
+      });
+
+      const windows = Array.isArray(room?.windows) ? room.windows : [];
+      windows.forEach((window: any) => {
+        const side = String(window?.position || 'west').toLowerCase();
+        const h = Math.max(0.6, Number(window?.height) || 1.1);
+        addSegmentOpening(room, side, 0.3, true, false, 'window', h, 1.0);
       });
     });
 
@@ -607,6 +899,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     // 3. CONSTRUCCIÓN DE MUROS CON CSG
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9 });
     const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.8 });
+    const doorMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.7, metalness: 0.05 });
     const glassMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x88ccff, metalness: 0.1, roughness: 0.05, transmission: 0.9, opacity: 1, transparent: true, ior: 1.5, side: THREE.DoubleSide
     });
@@ -632,19 +925,16 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       const wallOpenings = openingByWall.get(wall.id) || [];
       const resolvedOpenings: ResolvedWallOpening[] = wallOpenings.map((op) => {
         const projected = projectPointToSegment(op.x, op.y, start.x, start.y, end.x, end.y);
-        const centerX = start.x + dx / 2;
-        const centerY = start.y + dy / 2;
-        const isWindow = op.isWindow;
-        const targetWidth = isWindow ? (length * 0.3) : op.width;
-        const safeWidth = Math.min(Math.max(0.25, targetWidth), Math.max(0.25, length - 0.08));
+        const safeWidth = Math.min(Math.max(0.25, op.width), Math.max(0.25, length - 0.08));
         return {
-          x: isWindow ? centerX : projected.x,
-          y: isWindow ? centerY : projected.y,
+          x: projected.x,
+          y: projected.y,
           width: safeWidth,
           height: op.height,
           elevation: op.elevation,
           angle,
-          isWindow,
+          isWindow: op.isWindow,
+          isInteriorDoor: op.isInteriorDoor,
         };
       });
 
@@ -654,7 +944,10 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
         drillBrush.rotation.y = -op.angle;
         drillBrush.updateMatrixWorld();
 
-        currentWallBrush = csgEvaluator.evaluate(currentWallBrush, drillBrush, SUBTRACTION);
+        // Solo las ventanas generan abertura real en el muro.
+        if (op.isWindow) {
+          currentWallBrush = csgEvaluator.evaluate(currentWallBrush, drillBrush, SUBTRACTION);
+        }
 
         const frameBrush = new Brush(new THREE.BoxGeometry(op.width, op.height, wall.thickness + 0.05), frameMaterial);
         const innerDrill = new Brush(new THREE.BoxGeometry(op.width - 0.08, op.isWindow ? op.height - 0.08 : op.height - 0.04, wall.thickness * 3));
@@ -677,6 +970,30 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
           glass.position.copy(drillBrush.position);
           glass.rotation.y = drillBrush.rotation.y;
           scene.add(glass);
+        } else {
+          // Puerta cerrada: hoja visible en ambas caras del muro, sin abertura.
+          const normalX = -Math.sin(op.angle);
+          const normalZ = Math.cos(op.angle);
+          const offset = (wall.thickness / 2) + 0.015;
+
+          const makeLeaf = (dir: 1 | -1) => {
+            const leaf = new THREE.Mesh(
+              new THREE.BoxGeometry(op.width - 0.06, op.height - 0.08, 0.03),
+              doorMaterial
+            );
+            leaf.position.set(
+              op.x + (normalX * offset * dir),
+              op.elevation + (op.height / 2),
+              op.y + (normalZ * offset * dir)
+            );
+            leaf.rotation.y = drillBrush.rotation.y;
+            leaf.castShadow = true;
+            leaf.receiveShadow = true;
+            scene.add(leaf);
+          };
+
+          makeLeaf(1);
+          makeLeaf(-1);
         }
       });
 
