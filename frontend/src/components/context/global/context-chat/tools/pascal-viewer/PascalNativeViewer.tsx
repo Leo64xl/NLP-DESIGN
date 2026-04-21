@@ -235,26 +235,34 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     camera.updateProjectionMatrix();
 
     const createMetricLabelSprite = (text: string) => {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
       const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 92;
+      canvas.width = Math.floor(512 * dpr);
+      canvas.height = Math.floor(140 * dpr);
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(dpr, dpr);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '700 40px Segoe UI, Arial, sans-serif';
+      ctx.font = '700 56px Segoe UI, Arial, sans-serif';
+      ctx.strokeStyle = 'rgba(5, 10, 22, 0.95)';
+      ctx.lineWidth = 11;
+      ctx.strokeText(text, 256, 70);
       ctx.strokeStyle = '#ffb347';
-      ctx.lineWidth = 9;
+      ctx.lineWidth = 6;
       ctx.shadowColor = 'rgba(255, 179, 71, 0.7)';
-      ctx.shadowBlur = 14;
-      ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+      ctx.shadowBlur = 5;
+      ctx.strokeText(text, 256, 70);
       ctx.shadowBlur = 0;
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      ctx.fillText(text, 256, 70);
 
       const texture = new THREE.CanvasTexture(canvas);
+      texture.generateMipmaps = false;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
       texture.needsUpdate = true;
       const material = new THREE.SpriteMaterial({
         map: texture,
@@ -1255,26 +1263,34 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     };
 
     const createRoomLabel = (text: string, neonColor: string) => {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
       const canvas = document.createElement('canvas');
-      canvas.width = 560;
-      canvas.height = 132;
+      canvas.width = Math.floor(1024 * dpr);
+      canvas.height = Math.floor(260 * dpr);
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(dpr, dpr);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '700 54px Segoe UI, Arial, sans-serif';
+      ctx.font = '700 88px Segoe UI, Arial, sans-serif';
+      ctx.strokeStyle = 'rgba(5, 10, 24, 0.95)';
+      ctx.lineWidth = 16;
+      ctx.strokeText(text, 512, 130);
       ctx.strokeStyle = neonColor;
-      ctx.lineWidth = 10;
+      ctx.lineWidth = 7;
       ctx.shadowColor = neonColor;
-      ctx.shadowBlur = 14;
-      ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+      ctx.shadowBlur = 6;
+      ctx.strokeText(text, 512, 130);
       ctx.shadowBlur = 0;
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      ctx.fillText(text, 512, 130);
 
       const texture = new THREE.CanvasTexture(canvas);
+      texture.generateMipmaps = false;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
       texture.needsUpdate = true;
       const spriteMaterial = new THREE.SpriteMaterial({
         map: texture,
