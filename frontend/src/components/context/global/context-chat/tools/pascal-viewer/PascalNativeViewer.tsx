@@ -43,6 +43,7 @@ interface WallSegment {
 const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [processedData, setProcessedData] = useState<any>(null);
+  const VISUAL_PLAN_SCALE = 1.5;
 
   // ---------------------------------------------------------
   // PASO 1: CEREBRO MATEMÁTICO (DEDUPLICACIÓN DE MUROS)
@@ -50,6 +51,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
   useEffect(() => {
     if (!pascalData || !pascalData.rooms) return;
 
+    const planScale = VISUAL_PLAN_SCALE;
     const nodesMap: Record<string, any> = {};
     const walls: any[] = [];
     
@@ -85,10 +87,10 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     };
 
     pascalData.rooms.forEach((room: any) => {
-      const x1 = room.position.x;
-      const y1 = room.position.y;
-      const x2 = room.position.x + room.size.width;
-      const y2 = room.position.y + room.size.height;
+      const x1 = (Number(room?.position?.x) || 0) * planScale;
+      const y1 = (Number(room?.position?.y) || 0) * planScale;
+      const x2 = x1 + ((Number(room?.size?.width) || 0) * planScale);
+      const y2 = y1 + ((Number(room?.size?.height) || 0) * planScale);
 
       const nTL = addNode(x1, y1);
       const nTR = addNode(x2, y1);
@@ -111,6 +113,24 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
   // ---------------------------------------------------------
   useEffect(() => {
     if (!processedData || !mountRef.current || !pascalData) return;
+
+    const planScale = VISUAL_PLAN_SCALE;
+    const rooms = Array.isArray(pascalData?.rooms)
+      ? pascalData.rooms.map((room: any) => ({
+          ...room,
+          position: {
+            ...room.position,
+            x: (Number(room?.position?.x) || 0) * planScale,
+            y: (Number(room?.position?.y) || 0) * planScale,
+          },
+          size: {
+            ...room.size,
+            width: (Number(room?.size?.width) || 0) * planScale,
+            height: (Number(room?.size?.height) || 0) * planScale,
+          },
+        }))
+      : [];
+    const connections = Array.isArray(pascalData?.connections) ? pascalData.connections : [];
 
     const mountEl = mountRef.current;
     while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
@@ -155,7 +175,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       return 0xcfa574;
     };
 
-    pascalData.rooms.forEach((room: any) => {
+    rooms.forEach((room: any) => {
       const floorColor = getRoomFloorColor(room);
       const floor = new THREE.Mesh(
         new THREE.BoxGeometry(room.size.width, 0.1, room.size.height),
@@ -171,12 +191,10 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     processedData.project.nodes.forEach((n: any) => nodes.set(n.id, n));
     const realOpenings: RealOpening[] = [];
     const seenOpenings = new Set<string>();
-    const rooms = Array.isArray(pascalData?.rooms) ? pascalData.rooms : [];
     const roomByName = new Map<string, any>();
     rooms.forEach((room: any) => {
       roomByName.set(room.name, room);
     });
-    const connections = Array.isArray(pascalData?.connections) ? pascalData.connections : [];
 
     const normalizeAngle = (value: number): number => {
       if (!Number.isFinite(value)) return 0;
@@ -356,7 +374,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       const directY = Number(item?.y);
       const side = parseSide(item?.position);
       const orientationAngle = parseOrientationAngle(item?.orientation);
-      const width = Math.max(0.2, Number(item?.width) || (isWindow ? 1.2 : 0.9));
+      const width = Math.max(0.2 * planScale, (Number(item?.width) || (isWindow ? 1.2 : 0.9)) * planScale);
       const height = isWindow
         ? Math.max(0.6, Number(item?.height) || 1.1)
         : 2.1;
@@ -367,8 +385,8 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
         const py = Number(tuplePosition[1]);
         if (Number.isFinite(px) && Number.isFinite(py)) {
           return {
-            x: px,
-            y: py,
+            x: px * planScale,
+            y: py * planScale,
             width,
             height,
             elevation: isWindow ? 1.0 : 0,
@@ -382,8 +400,8 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
 
       if (Number.isFinite(directX) && Number.isFinite(directY)) {
         return {
-          x: directX,
-          y: directY,
+          x: directX * planScale,
+          y: directY * planScale,
           width,
           height,
           elevation: isWindow ? 1.0 : 0,
@@ -397,10 +415,10 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       const start = Array.isArray(item?.start) ? item.start : null;
       const end = Array.isArray(item?.end) ? item.end : null;
       if (start?.length === 2 && end?.length === 2) {
-        const sx = Number(start[0]);
-        const sy = Number(start[1]);
-        const ex = Number(end[0]);
-        const ey = Number(end[1]);
+        const sx = Number(start[0]) * planScale;
+        const sy = Number(start[1]) * planScale;
+        const ex = Number(end[0]) * planScale;
+        const ey = Number(end[1]) * planScale;
         if ([sx, sy, ex, ey].every(Number.isFinite)) {
           return {
             x: (sx + ex) / 2,
@@ -492,7 +510,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       const toRoom = roomByName.get(conn?.to);
       if (!fromRoom || !toRoom) return;
 
-      const refWidth = Math.max(0.2, Number(conn?.width) || 0.9);
+      const refWidth = Math.max(0.2 * planScale, (Number(conn?.width) || 0.9) * planScale);
       const shared = getSharedBoundaryDoor(fromRoom, toRoom, refWidth);
       if (!shared) return;
 
@@ -776,7 +794,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
         const roomWidth = Number(room?.size?.width) || 0;
         const roomHeight = Number(room?.size?.height) || 0;
         const edgeLength = (side === 'north' || side === 'south') ? roomWidth : roomHeight;
-        const doorWidth = Math.max(0.2, Number(door?.width) || 0.9);
+        const doorWidth = Math.max(0.2 * planScale, (Number(door?.width) || 0.9) * planScale);
         const proportionalSpan = edgeLength > 0.01 ? doorWidth / edgeLength : 0.25;
         const spanRatio = doorWidth >= 2
           ? Math.max(0.25, Math.min(0.85, proportionalSpan))
@@ -1044,13 +1062,80 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     sunLight.shadow.mapSize.height = 2048;
     scene.add(sunLight);
     
-    camera.position.set(15, 18, 20); 
+    camera.position.set(0, 7, 12);
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(5, 0, 5);
+    controls.target.set(0, 0, -8);
     controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+
+    const pressedKeys = new Set<string>();
+    const clock = new THREE.Clock();
+    const velocity = new THREE.Vector3(0, 0, 0);
+
+    const shouldCaptureKeyboard = () => {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active) return true;
+      const tag = String(active.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return false;
+      if (active.isContentEditable) return false;
+      return true;
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!shouldCaptureKeyboard()) return;
+      const key = event.key.toLowerCase();
+      if (!['w', 'a', 's', 'd', 'q', 'e'].includes(key)) return;
+      event.preventDefault();
+      pressedKeys.add(key);
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (!['w', 'a', 's', 'd', 'q', 'e'].includes(key)) return;
+      pressedKeys.delete(key);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
+      const dt = Math.min(0.05, clock.getDelta());
+
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      if (forward.lengthSq() > 1e-6) forward.normalize();
+
+      const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+      const desiredDirection = new THREE.Vector3(0, 0, 0);
+
+      if (pressedKeys.has('w')) desiredDirection.add(forward);
+      if (pressedKeys.has('s')) desiredDirection.sub(forward);
+      if (pressedKeys.has('d')) desiredDirection.add(right);
+      if (pressedKeys.has('a')) desiredDirection.sub(right);
+      if (pressedKeys.has('q')) desiredDirection.y += 1;
+      if (pressedKeys.has('e')) desiredDirection.y -= 1;
+
+      if (desiredDirection.lengthSq() > 1e-6) {
+        desiredDirection.normalize();
+      }
+
+      const moveSpeed = 8.5;
+      const smooth = Math.min(1, dt * 7);
+      const targetVelocity = desiredDirection.multiplyScalar(moveSpeed);
+      velocity.lerp(targetVelocity, smooth);
+
+      if (desiredDirection.lengthSq() <= 1e-6) {
+        const damping = Math.max(0, 1 - (dt * 8));
+        velocity.multiplyScalar(damping);
+      }
+
+      const frameMove = velocity.clone().multiplyScalar(dt);
+      camera.position.add(frameMove);
+      controls.target.add(frameMove);
+
       controls.update();
       renderer.render(scene, camera);
     };
@@ -1058,6 +1143,8 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
 
     return () => {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
       controls.dispose();
       renderer.dispose();
     };
