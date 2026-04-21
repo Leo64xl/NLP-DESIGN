@@ -900,6 +900,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9 });
     const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.8 });
     const doorMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.7, metalness: 0.05 });
+    const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9, metalness: 0.02 });
     const glassMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x88ccff, metalness: 0.1, roughness: 0.05, transmission: 0.9, opacity: 1, transparent: true, ior: 1.5, side: THREE.DoubleSide
     });
@@ -1000,6 +1001,38 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       currentWallBrush.castShadow = true;
       currentWallBrush.receiveShadow = true;
       scene.add(currentWallBrush);
+    });
+
+    // Techitos provisionales: planos, con pequeño volado y grosor corto.
+    const wallHeight = processedData.project.walls.reduce(
+      (max: number, wall: any) => Math.max(max, Number(wall?.height) || 2.8),
+      2.8
+    );
+    const roofThickness = 0.35;
+    const roofOverhang = 0.27;
+
+    rooms.forEach((room: any) => {
+      const width = Math.max(0, Number(room?.size?.width) || 0);
+      const depth = Math.max(0, Number(room?.size?.height) || 0);
+      if (width < 0.35 || depth < 0.35) return;
+
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          Math.max(0.24, width + (roofOverhang * 2)),
+          roofThickness,
+          Math.max(0.24, depth + (roofOverhang * 2))
+        ),
+        roofMaterial
+      );
+
+      roof.position.set(
+        room.position.x + (width / 2),
+        wallHeight + (roofThickness / 2) + 0.01,
+        room.position.y + (depth / 2)
+      );
+      roof.castShadow = true;
+      roof.receiveShadow = true;
+      scene.add(roof);
     });
 
     // 4. LUCES Y CONTROLES
