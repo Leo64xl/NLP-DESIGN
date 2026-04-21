@@ -165,15 +165,15 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
 
     let animationFrameId: number | null = null;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xddecff);
-    scene.fog = new THREE.Fog(0xddecff, 10, 50);
+    scene.background = new THREE.Color(0x040b1f);
+    scene.fog = null;
 
-    const camera = new THREE.PerspectiveCamera(60, mountEl.clientWidth / mountEl.clientHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(60, mountEl.clientWidth / mountEl.clientHeight, 0.08, 2000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(mountEl.clientWidth, mountEl.clientHeight, false);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.sortObjects = true;
+    renderer.shadowMap.enabled = false;
     mountEl.appendChild(renderer.domElement);
 
     const resizeRendererToContainer = () => {
@@ -201,42 +201,155 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     };
     window.addEventListener('resize', handleWindowResize);
 
-    // 1. TERRENO Y PISOS
+    const layoutBounds = rooms.reduce(
+      (acc: { minX: number; minY: number; maxX: number; maxY: number }, room: any) => {
+        const x1 = Number(room?.position?.x) || 0;
+        const y1 = Number(room?.position?.y) || 0;
+        const x2 = x1 + (Number(room?.size?.width) || 0);
+        const y2 = y1 + (Number(room?.size?.height) || 0);
+        return {
+          minX: Math.min(acc.minX, x1),
+          minY: Math.min(acc.minY, y1),
+          maxX: Math.max(acc.maxX, x2),
+          maxY: Math.max(acc.maxY, y2),
+        };
+      },
+      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+    );
+
+    const isBoundsValid = Number.isFinite(layoutBounds.minX)
+      && Number.isFinite(layoutBounds.minY)
+      && Number.isFinite(layoutBounds.maxX)
+      && Number.isFinite(layoutBounds.maxY);
+
+    const bounds = isBoundsValid
+      ? layoutBounds
+      : { minX: -6, minY: -6, maxX: 6, maxY: 6 };
+
+    const layoutWidth = Math.max(1, bounds.maxX - bounds.minX);
+    const layoutDepth = Math.max(1, bounds.maxY - bounds.minY);
+    const worldGridSize = Math.ceil(Math.max(120, Math.max(layoutWidth, layoutDepth) + 90));
+
+    camera.near = 0.08;
+    camera.far = Math.max(800, worldGridSize * 6);
+    camera.updateProjectionMatrix();
+
+    const createMetricLabelSprite = (text: string) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 92;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 40px Segoe UI, Arial, sans-serif';
+      ctx.strokeStyle = '#ffb347';
+      ctx.lineWidth = 9;
+      ctx.shadowColor = 'rgba(255, 179, 71, 0.7)';
+      ctx.shadowBlur = 14;
+      ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(3.2, 1.2, 1);
+      return sprite;
+    };
+
+    // 1. TERRENO, CUADRICULA Y PISOS
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
-      new THREE.MeshStandardMaterial({ color: 0x8ebf6a, roughness: 1 })
+      new THREE.PlaneGeometry(worldGridSize + 20, worldGridSize + 20),
+      new THREE.MeshStandardMaterial({
+        color: 0x343842,
+        roughness: 0.9,
+        metalness: 0.15,
+        transparent: true,
+        opacity: 0.55,
+      })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.05;
-    ground.receiveShadow = true;
+    ground.renderOrder = -20;
     scene.add(ground);
 
-    const getRoomFloorColor = (room: any): number => {
-      const rawType = String(room?.type || '').toLowerCase();
-      const rawName = String(room?.name || '').toLowerCase();
-      const key = `${rawType} ${rawName}`;
+    // Una sola cuadricula global en metros, sin lineas de eje destacadas.
+    const meterGrid = new THREE.GridHelper(worldGridSize, worldGridSize, 0x21438f, 0x21438f);
+    meterGrid.position.y = -0.017;
+    meterGrid.renderOrder = -19;
+    scene.add(meterGrid);
 
-      if (key.includes('bathroom') || key.includes('baño') || key.includes('bano')) return 0xd8dde3;
-      if (key.includes('kitchen') || key.includes('cocina')) return 0xd7d2c8;
-      if (key.includes('hallway') || key.includes('circulación') || key.includes('circulacion') || key.includes('pasillo')) return 0xd4c7a3;
-      if (key.includes('bedroom') || key.includes('habitación') || key.includes('habitacion')) return 0xc8ae8a;
-      if (key.includes('living') || key.includes('sala') || key.includes('dining') || key.includes('comedor')) return 0xc9a57a;
-      if (key.includes('garage') || key.includes('estacionamiento')) return 0xb6b6b6;
-      if (key.includes('office') || key.includes('oficina')) return 0xc7b091;
-      if (key.includes('storage') || key.includes('lavandería') || key.includes('lavanderia') || key.includes('bodega')) return 0xbda88b;
+    const borderPadding = 8;
+    const borderMinX = bounds.minX - borderPadding;
+    const borderMaxX = bounds.maxX + borderPadding;
+    const borderMinZ = bounds.minY - borderPadding;
+    const borderMaxZ = bounds.maxY + borderPadding;
+    const borderPoints = [
+      new THREE.Vector3(borderMinX, 0.015, borderMinZ),
+      new THREE.Vector3(borderMaxX, 0.015, borderMinZ),
+      new THREE.Vector3(borderMaxX, 0.015, borderMaxZ),
+      new THREE.Vector3(borderMinX, 0.015, borderMaxZ),
+      new THREE.Vector3(borderMinX, 0.015, borderMinZ),
+    ];
+    const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
+    const borderLine = new THREE.Line(
+      borderGeometry,
+      new THREE.LineBasicMaterial({ color: 0xffa43d, transparent: true, opacity: 0.9 })
+    );
+    borderLine.renderOrder = -18;
+    scene.add(borderLine);
 
-      // Fallback para cualquier otro espacio.
-      return 0xcfa574;
-    };
+    const widthMeters = Math.round(layoutWidth);
+    const depthMeters = Math.round(layoutDepth);
+    const borderLabelY = 0.45;
+
+    const topLabel = createMetricLabelSprite(`${widthMeters}m`);
+    if (topLabel) {
+      topLabel.position.set((borderMinX + borderMaxX) / 2, borderLabelY, borderMinZ - 0.55);
+      scene.add(topLabel);
+    }
+
+    const bottomLabel = createMetricLabelSprite(`${widthMeters}m`);
+    if (bottomLabel) {
+      bottomLabel.position.set((borderMinX + borderMaxX) / 2, borderLabelY, borderMaxZ + 0.55);
+      scene.add(bottomLabel);
+    }
+
+    const leftLabel = createMetricLabelSprite(`${depthMeters}m`);
+    if (leftLabel) {
+      leftLabel.position.set(borderMinX - 0.55, borderLabelY, (borderMinZ + borderMaxZ) / 2);
+      scene.add(leftLabel);
+    }
+
+    const rightLabel = createMetricLabelSprite(`${depthMeters}m`);
+    if (rightLabel) {
+      rightLabel.position.set(borderMaxX + 0.55, borderLabelY, (borderMinZ + borderMaxZ) / 2);
+      scene.add(rightLabel);
+    }
+
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0xbfc4cf,
+      roughness: 0.78,
+      metalness: 0.06,
+    });
 
     rooms.forEach((room: any) => {
-      const floorColor = getRoomFloorColor(room);
       const floor = new THREE.Mesh(
         new THREE.BoxGeometry(room.size.width, 0.1, room.size.height),
-        new THREE.MeshStandardMaterial({ color: floorColor, roughness: 0.8 })
+        floorMaterial
       );
       floor.position.set(room.position.x + room.size.width / 2, 0, room.position.y + room.size.height / 2);
-      floor.receiveShadow = true;
+      floor.renderOrder = -5;
       scene.add(floor);
     });
 
@@ -612,7 +725,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     realOpenings.length = 0;
     seenOpenings.clear();
 
-    const bounds = rooms.reduce(
+    const svgBounds = rooms.reduce(
       (acc: { minX: number; minY: number; maxX: number; maxY: number }, room: any) => {
         const x1 = Number(room?.position?.x) || 0;
         const y1 = Number(room?.position?.y) || 0;
@@ -628,8 +741,8 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
     );
 
-    const extentWidth = Math.max(0.01, bounds.maxX - bounds.minX);
-    const extentHeight = Math.max(0.01, bounds.maxY - bounds.minY);
+    const extentWidth = Math.max(0.01, svgBounds.maxX - svgBounds.minX);
+    const extentHeight = Math.max(0.01, svgBounds.maxY - svgBounds.minY);
     const maxRealDimension = Math.max(extentWidth, extentHeight);
     const svgLikeScale = 900 / maxRealDimension;
 
@@ -969,12 +1082,41 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     };
 
     // 3. CONSTRUCCIÓN DE MUROS CON CSG
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9 });
-    const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.8 });
-    const doorMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.7, metalness: 0.05 });
-    const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9, metalness: 0.02 });
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8391b6,
+      roughness: 0.48,
+      metalness: 0.25,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const frameMaterial = new THREE.MeshStandardMaterial({ color: 0xd8e3ff, roughness: 0.35, metalness: 0.6, transparent: true, opacity: 0.78, depthWrite: false });
+    const doorMaterial = new THREE.MeshStandardMaterial({
+      color: 0xdfe6ff,
+      roughness: 0.6,
+      metalness: 0.08,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false,
+    });
+    const roofMaterial = new THREE.MeshStandardMaterial({
+      color: 0xd3d7df,
+      roughness: 0.74,
+      metalness: 0.05,
+    });
     const glassMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x88ccff, metalness: 0.1, roughness: 0.05, transmission: 0.9, opacity: 1, transparent: true, ior: 1.5, side: THREE.DoubleSide
+      color: 0xb4e2ff,
+      emissive: 0x2d7fd1,
+      emissiveIntensity: 0.28,
+      metalness: 0.02,
+      roughness: 0.04,
+      transmission: 0.3,
+      opacity: 0.82,
+      transparent: true,
+      depthWrite: false,
+      ior: 1.38,
+      side: THREE.DoubleSide,
     });
 
     const csgEvaluator = new Evaluator();
@@ -1035,13 +1177,14 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
         innerDrill.updateMatrixWorld();
 
         const frame = csgEvaluator.evaluate(frameBrush, innerDrill, SUBTRACTION);
-        frame.castShadow = true;
+        frame.renderOrder = 14;
         scene.add(frame);
 
         if (op.isWindow) {
           const glass = new THREE.Mesh(new THREE.BoxGeometry(op.width - 0.06, op.height - 0.1, 0.02), glassMaterial);
           glass.position.copy(drillBrush.position);
           glass.rotation.y = drillBrush.rotation.y;
+          glass.renderOrder = 16;
           scene.add(glass);
         } else {
           // Puerta cerrada: hoja visible en ambas caras del muro, sin abertura.
@@ -1060,8 +1203,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
               op.y + (normalZ * offset * dir)
             );
             leaf.rotation.y = drillBrush.rotation.y;
-            leaf.castShadow = true;
-            leaf.receiveShadow = true;
+            leaf.renderOrder = 15;
             scene.add(leaf);
           };
 
@@ -1070,8 +1212,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
         }
       });
 
-      currentWallBrush.castShadow = true;
-      currentWallBrush.receiveShadow = true;
+      currentWallBrush.renderOrder = 10;
       scene.add(currentWallBrush);
     });
 
@@ -1102,19 +1243,81 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
         wallHeight + (roofThickness / 2) + 0.01,
         room.position.y + (depth / 2)
       );
-      roof.castShadow = true;
-      roof.receiveShadow = true;
+      roof.renderOrder = 18;
       scene.add(roof);
     });
 
+    const neonPalette = [0x74f4ff, 0x9eff9b, 0xffb2e4, 0xffd089, 0xbea8ff, 0x9fc1ff];
+    const pickNeonColor = (text: string): string => {
+      const value = Array.from(String(text || '')).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+      const color = neonPalette[value % neonPalette.length];
+      return `#${color.toString(16).padStart(6, '0')}`;
+    };
+
+    const createRoomLabel = (text: string, neonColor: string) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 560;
+      canvas.height = 132;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 54px Segoe UI, Arial, sans-serif';
+      ctx.strokeStyle = neonColor;
+      ctx.lineWidth = 10;
+      ctx.shadowColor = neonColor;
+      ctx.shadowBlur = 14;
+      ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      const spriteMaterial = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.scale.set(3.7, 0.9, 1);
+      return sprite;
+    };
+
+    const roomLabelY = 1.6;
+    rooms.forEach((room: any) => {
+      const text = String(room?.name || room?.type || '').trim();
+      if (!text) return;
+
+      const roomLabel = createRoomLabel(text, pickNeonColor(text));
+      if (!roomLabel) return;
+      roomLabel.position.set(
+        room.position.x + (room.size.width / 2),
+        roomLabelY,
+        room.position.y + (room.size.height / 2)
+      );
+      roomLabel.renderOrder = 30;
+      scene.add(roomLabel);
+    });
+
     // 4. LUCES Y CONTROLES
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    sunLight.position.set(15, 20, 10);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
+    scene.add(new THREE.AmbientLight(0x97b8ff, 0.52));
+
+    const hemi = new THREE.HemisphereLight(0x6b8dff, 0x101a2f, 0.45);
+    scene.add(hemi);
+
+    const sunLight = new THREE.DirectionalLight(0xbfd1ff, 1.15);
+    sunLight.position.set(22, 26, 12);
     scene.add(sunLight);
+
+    scene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.Line || obj instanceof THREE.Sprite) {
+        obj.frustumCulled = false;
+      }
+    });
     
     camera.position.set(0, 7, 12);
     const controls = new OrbitControls(camera, renderer.domElement);
