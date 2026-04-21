@@ -2171,31 +2171,53 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 10px 16px;
   background: #f6f7fb;
   border-bottom: 1px solid #e6e8f0;
+  gap: 10px;
 }
 
 .chat-render-modal-title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   color: #2b2f4b;
+  text-align: left;
 }
 
-.chat-render-modal-close {
+.chat-render-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.chat-render-modal-action {
   background: #ffffff;
   color: #2b2f4b;
   border: 1px solid #d7dbe8;
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+}
+
+.chat-render-modal-action:hover {
+  background: #f4f6ff;
+}
+
+.chat-render-modal-close:hover {
+  background: #fff3f4;
+  border-color: #efc9ce;
+  color: #9a3140;
 }
 
 .chat-render-modal-body {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
 .chat-render-modal-viewer-container {
@@ -2203,6 +2225,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* Ajustes responsivos para el viewer en el chat */

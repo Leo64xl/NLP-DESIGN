@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Settings,
   Palette,
+  X,
 } from "lucide-react";
 import { useLanguage } from "../../../../../contexts/LanguageContext";
 import { ArchitecturalValidator } from "../../../../../utils/architecturalValidator";
@@ -2064,19 +2065,22 @@ const Chat: React.FC = () => {
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="chat-render-modal-header">
-                    <div className="chat-render-modal-title">Renderizado</div>
-                    <button
-                      className="chat-render-modal-close"
-                      onClick={closeRenderModal}
-                    >
-                      Cerrar
-                    </button>
+                    <div className="chat-render-modal-title">Renderizado del Plano Arquitectonico</div>
+                    <div className="chat-render-modal-actions">
+                      <button
+                        className="chat-render-modal-action chat-render-modal-close"
+                        onClick={closeRenderModal}
+                        title="Cerrar"
+                        aria-label="Cerrar"
+                        type="button"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
                   </div>
                   <div className="chat-render-modal-body">
                     <div className="chat-render-modal-viewer-container">
-                      <PascalNativeViewer
-                        pascalData={renderModalData}
-                      />
+                      <PascalNativeViewer pascalData={renderModalData} />
                     </div>
                   </div>
                 </div>

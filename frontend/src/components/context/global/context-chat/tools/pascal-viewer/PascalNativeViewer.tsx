@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Evaluator, Brush, SUBTRACTION } from 'three-bvh-csg';
+import { Maximize2, Minimize2 } from 'lucide-react';
 
 interface PascalNativeViewerProps {
   pascalData: any;
@@ -42,8 +43,35 @@ interface WallSegment {
 
 const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) => {
   const mountRef = useRef<HTMLDivElement>(null);
+  const viewerContainerRef = useRef<HTMLDivElement>(null);
   const [processedData, setProcessedData] = useState<any>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const VISUAL_PLAN_SCALE = 1.5;
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === viewerContainerRef.current);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    const container = viewerContainerRef.current;
+    if (!container) return;
+
+    if (document.fullscreenElement === container) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    if (!document.fullscreenElement) {
+      await container.requestFullscreen();
+    }
+  }, []);
 
   // ---------------------------------------------------------
   // PASO 1: CEREBRO MATEMÁTICO (DEDUPLICACIÓN DE MUROS)
@@ -142,10 +170,36 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
 
     const camera = new THREE.PerspectiveCamera(60, mountEl.clientWidth / mountEl.clientHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(mountEl.clientWidth, mountEl.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(mountEl.clientWidth, mountEl.clientHeight, false);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     mountEl.appendChild(renderer.domElement);
+
+    const resizeRendererToContainer = () => {
+      const width = Math.max(1, mountEl.clientWidth);
+      const height = Math.max(1, mountEl.clientHeight);
+      const canvas = renderer.domElement;
+      const needsResize = canvas.width !== width || canvas.height !== height;
+
+      if (needsResize) {
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      }
+    };
+
+    resizeRendererToContainer();
+
+    const resizeObserver = new ResizeObserver(() => {
+      resizeRendererToContainer();
+    });
+    resizeObserver.observe(mountEl);
+
+    const handleWindowResize = () => {
+      resizeRendererToContainer();
+    };
+    window.addEventListener('resize', handleWindowResize);
 
     // 1. TERRENO Y PISOS
     const ground = new THREE.Mesh(
@@ -1103,6 +1157,8 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       animationFrameId = requestAnimationFrame(animate);
       const dt = Math.min(0.05, clock.getDelta());
 
+      resizeRendererToContainer();
+
       const forward = new THREE.Vector3();
       camera.getWorldDirection(forward);
       forward.y = 0;
@@ -1145,16 +1201,75 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('resize', handleWindowResize);
+      resizeObserver.disconnect();
       controls.dispose();
       renderer.dispose();
     };
-  }, [processedData, pascalData]);
+  }, [processedData, pascalData, isFullscreen]);
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#fff', borderRadius: '8px', width: '100%' }}>
-      <h3 style={{ margin: '0 0 15px 0', color: '#333' }}>Vista Estructural 3D</h3>
+    <div
+      ref={viewerContainerRef}
+      style={{
+        padding: isFullscreen ? '12px' : '0',
+        backgroundColor: isFullscreen ? '#fff' : 'transparent',
+        borderRadius: isFullscreen ? 0 : '8px',
+        width: '100%',
+        height: isFullscreen ? '100vh' : '100%',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       {!processedData && <p style={{ color: '#666' }}>Optimizando geometría de muros...</p>}
-      <div ref={mountRef} style={{ width: '100%', height: '500px', border: '1px solid #e0e0e0', borderRadius: '8px', overflow: 'hidden' }} />
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          flex: '1 1 auto',
+          minHeight: 0,
+        }}
+      >
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
+          aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
+          style={{
+            position: 'absolute',
+            top: '12px',
+            left: '12px',
+            zIndex: 20,
+            border: '1px solid #d0d0d0',
+            borderRadius: '10px',
+            background: 'rgba(255, 255, 255, 0.92)',
+            color: '#333',
+            cursor: 'pointer',
+            width: '40px',
+            height: '40px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 3px 12px rgba(0, 0, 0, 0.18)',
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+        </button>
+
+        <div
+          ref={mountRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: '1px solid #e0e0e0',
+            borderRadius: isFullscreen ? '6px' : '8px',
+            overflow: 'hidden',
+          }}
+        />
+      </div>
     </div>
   );
 };
