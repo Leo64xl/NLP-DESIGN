@@ -143,9 +143,14 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
     if (!processedData || !mountRef.current || !pascalData) return;
 
     const planScale = VISUAL_PLAN_SCALE;
+    // 1) Al mapear rooms, conserva el tamaño original para calcular el área real
     const rooms = Array.isArray(pascalData?.rooms)
       ? pascalData.rooms.map((room: any) => ({
           ...room,
+          rawSize: {
+            width: Number(room?.size?.width) || 0,
+            height: Number(room?.size?.height) || 0,
+          },
           position: {
             ...room.position,
             x: (Number(room?.position?.x) || 0) * planScale,
@@ -158,6 +163,7 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
           },
         }))
       : [];
+      
     const connections = Array.isArray(pascalData?.connections) ? pascalData.connections : [];
 
     const mountEl = mountRef.current;
@@ -1262,11 +1268,13 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       return `#${color.toString(16).padStart(6, '0')}`;
     };
 
-    const createRoomLabel = (text: string, neonColor: string) => {
+        // 2) Sustituye createRoomLabel por esta versión
+    const createRoomLabel = (name: string, area: string) => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(1024 * dpr);
-      canvas.height = Math.floor(260 * dpr);
+      canvas.height = Math.floor(300 * dpr);
+
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
 
@@ -1274,42 +1282,55 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       ctx.scale(dpr, dpr);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '700 88px Segoe UI, Arial, sans-serif';
+
+      // Nombre principal
+      ctx.font = '400 60px Segoe UI, Arial, sans-serif';
+      ctx.lineWidth = 14;
       ctx.strokeStyle = 'rgba(5, 10, 24, 0.95)';
-      ctx.lineWidth = 16;
-      ctx.strokeText(text, 512, 130);
-      ctx.strokeStyle = neonColor;
-      ctx.lineWidth = 7;
-      ctx.shadowColor = neonColor;
-      ctx.shadowBlur = 6;
-      ctx.strokeText(text, 512, 130);
-      ctx.shadowBlur = 0;
+      ctx.strokeText(name.toUpperCase(), 512, 120);
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(text, 512, 130);
+      ctx.fillText(name.toUpperCase(), 512, 120);
+
+      // Área debajo, más pequeña y discreta
+      ctx.font = '400 50px Segoe UI, Arial, sans-serif';
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = 'rgba(5, 10, 24, 0.95)';
+      ctx.strokeText(`${area} m²`, 512, 210);
+      ctx.fillStyle = 'rgba(235, 240, 250, 0.92)';
+      ctx.fillText(`${area} m²`, 512, 210);
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.generateMipmaps = false;
       texture.minFilter = THREE.LinearFilter;
       texture.magFilter = THREE.LinearFilter;
       texture.needsUpdate = true;
+
       const spriteMaterial = new THREE.SpriteMaterial({
         map: texture,
         transparent: true,
         depthWrite: false,
         depthTest: false,
       });
+
       const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.scale.set(3.7, 0.9, 1);
+      sprite.scale.set(4.2, 1.35, 1);
       return sprite;
     };
 
+    // 3) Sustituye el bloque donde calculas areaValue y creas la etiqueta
     const roomLabelY = 1.6;
+
     rooms.forEach((room: any) => {
       const text = String(room?.name || room?.type || '').trim();
       if (!text) return;
 
-      const roomLabel = createRoomLabel(text, pickNeonColor(text));
+      const rawWidth = Number(room?.rawSize?.width) || 0;
+      const rawHeight = Number(room?.rawSize?.height) || 0;
+      const areaValue = (rawWidth * rawHeight).toFixed(2);
+
+      const roomLabel = createRoomLabel(text, areaValue);
       if (!roomLabel) return;
+
       roomLabel.position.set(
         room.position.x + (room.size.width / 2),
         roomLabelY,
