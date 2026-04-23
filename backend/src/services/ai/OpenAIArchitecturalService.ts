@@ -112,16 +112,10 @@ export interface FileGenerationResult {
     filename: string;
     path: string;
   };
-  stl: {
-    content: string;
-    filename: string;
-    path: string;
-  };
   structuralData: NLPStructuralData;
   processingTime: number;
   files: {
     svg: string;
-    stl: string;
   };
 }
 
@@ -147,7 +141,7 @@ export class OpenAIArchitecturalService {
   }
 
   /**
-   * Procesa texto en lenguaje natural y genera archivos 2D/3D
+   * Procesa texto en lenguaje natural y genera archivos 2D
    */
   static async processNLPToFiles(
     userDescription: string,
@@ -155,7 +149,7 @@ export class OpenAIArchitecturalService {
     outputDirectory: string
   ): Promise<FileGenerationResult> {
     const startTime = Date.now();
-    console.log('🚀 Iniciando procesamiento NLP to 2D/3D...');
+    console.log('🚀 Iniciando procesamiento NLP to 2D (SVG solo)...');
     console.log('📝 Descripción del usuario:', userDescription);
 
     try {
@@ -167,20 +161,14 @@ export class OpenAIArchitecturalService {
       const svgResult = await this.generateSVGFile(structuralData, designId, outputDirectory);
       console.log('✅ Archivo SVG generado:', svgResult.filename);
 
-      // 3. Generar STL (modelo 3D)
-      const stlResult = await this.generateSTLFile(structuralData, designId, outputDirectory);
-      console.log('✅ Archivo STL generado:', stlResult.filename);
-
       const processingTime = Date.now() - startTime;
 
       return {
         svg: svgResult,
-        stl: stlResult,
         structuralData,
         processingTime,
         files: {
-          svg: svgResult.path,
-          stl: stlResult.path
+          svg: svgResult.path
         }
       };
 
@@ -3035,39 +3023,6 @@ Genera un diseño arquitectónico completo, realista y funcional basado en esta 
 
     return {
       content: svgContent,
-      filename,
-      path: fullPath
-    };
-  }
-
-  /**
-   * Genera archivo STL (modelo 3D)
-   */
-  private static async generateSTLFile(
-    data: NLPStructuralData, 
-    designId: string, 
-    outputDirectory: string
-  ): Promise<{ content: string; filename: string; path: string }> {
-    const TypeScriptSTLGenerator = (await import('./TypeScriptSTLGenerator')).default;
-    
-    const stlContent = TypeScriptSTLGenerator.generateArchitecturalSTL(data);
-    const filename = `${designId}_model_3d.stl`;
-    const fullPath = `${outputDirectory}/${filename}`;
-
-    // Guardar archivo
-    const fs = await import('fs');
-    const path = await import('path');
-    
-    // Crear directorio si no existe
-    const dir = path.dirname(fullPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(fullPath, stlContent, 'utf8');
-
-    return {
-      content: stlContent,
       filename,
       path: fullPath
     };

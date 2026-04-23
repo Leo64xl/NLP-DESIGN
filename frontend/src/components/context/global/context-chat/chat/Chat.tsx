@@ -339,9 +339,9 @@ const Chat: React.FC = () => {
   const DEFAULT_TYPES: DesignType[] = [
     {
       type: "both",
-      label: "Diseño Completo 2D + 3D",
-      description: "Planos arquitectónicos y modelo 3D",
-      features: ["svg", "stl"], // SVG para 2D y STL para 3D
+      label: "Plano Arquitectónico 2D",
+      description: "Planos arquitectónicos en SVG",
+      features: ["svg"], // Solo SVG para plano 2D
     },
   ];
 
@@ -590,21 +590,30 @@ const Chat: React.FC = () => {
           { withCredentials: true }
         );
 
-        if (designResponse.data.success && designResponse.data.data) {
-          const design = designResponse.data.data.design;
-          setDesignData({
-            uuid: design.uuid,
-            title: design.title,
-            type: design.type,
-            status: design.status === "active" ? "generating" : "ready",
-            files:
-              design.files?.map((file) => ({
-                type: file.fileType,
-                status: file.status as "generating" | "ready" | "error",
-                url: file.downloadUrl,
-                progress: file.status === "ready" ? 100 : 50,
-              })) || [],
-          });
+        if (
+          designResponse.data.success &&
+          designResponse.data.data
+        ) {
+          const existingDesign = designResponse.data.data.design;
+          if (
+            existingDesign.status === "completed" ||
+            existingDesign.status === "ready"
+          ) {
+            setDesignData({
+              uuid: existingDesign.uuid,
+              title: existingDesign.title,
+              type: existingDesign.type,
+              status: "ready",
+              files: [
+                {
+                  type: "svg",
+                  status: "ready",
+                  url: "svg_ready",  // señal interna para handleDownloadFile
+                  progress: 100,
+                },
+              ],
+            });
+          }
         }
       } catch (designError) {
         console.log("Error cargando datos del diseño:", designError);
@@ -722,7 +731,7 @@ const Chat: React.FC = () => {
                 designType: designType,
                 complexity: "medium",
                 priority: "quality",
-                fileTypes: ["svg", "stl"], // SVG y STL
+                fileTypes: ["svg"], // Solo SVG
               },
             },
           };
@@ -791,8 +800,7 @@ const Chat: React.FC = () => {
                   type: designData.type,
                   status: "generating",
                   files: [
-                    { type: "svg", status: "generating", progress: 0 },
-                    { type: "stl", status: "generating", progress: 0 }
+                    { type: "svg", status: "generating", progress: 0 }
                   ],
                 });
                 setIsGenerating(false);
@@ -804,8 +812,7 @@ const Chat: React.FC = () => {
                   type: designData.type,
                   status: "generating",
                   files: [
-                    { type: "svg", status: "generating", progress: 0 },
-                    { type: "stl", status: "generating", progress: 0 }
+                    { type: "svg", status: "generating", progress: 0 }
                   ],
                 });
                 // 🚀 INICIAR MONITOREO DE ARCHIVOS
@@ -816,7 +823,7 @@ const Chat: React.FC = () => {
               const confirmationMessage: Message = {
                 uuid: generateUUID(),
                 role: "assistant",
-                content: `✅ Perfecto! He comenzado a generar tu diseño arquitectónico completo que incluye:\n\n🎨 **Plano 2D** (SVG) - Planos arquitectónicos vectoriales\n🏗️ **Modelo 3D** (STL) - Modelo tridimensional imprimible\n\nLos archivos estarán listos en unos momentos...`,
+                content: `✅ Perfecto! He comenzado a generar tu plano arquitectónico 2D en SVG.\n\n🎨 **Plano 2D** (SVG) - Plano arquitectónico vectorial de alta calidad\n\nEl archivo estará listo en unos momentos...`,
                 status: "completed",
                 createdAt: new Date().toISOString(),
               };
@@ -829,8 +836,7 @@ const Chat: React.FC = () => {
                 type: designData.type,
                 status: "generating",
                 files: [
-                  { type: "svg", status: "generating", progress: 0 },
-                  { type: "stl", status: "generating", progress: 0 }
+                  { type: "svg", status: "generating", progress: 0 }
                 ],
               });
               console.log("🔍 Iniciando monitoreo de archivos (fallback)");
@@ -1079,184 +1085,214 @@ const Chat: React.FC = () => {
 
   // 📊 MONITOREO DE PROGRESO MEJORADO
   const startProgressMonitoring = (designUuid: string) => {
-    console.log("🔍 Iniciando monitoreo mejorado para:", designUuid);
-
-    setIsGenerating(true);
-
-    let monitoringActive = true;
-    let consecutiveErrors = 0;
-    let lastMessageCount = 0; // INICIAR EN 0 para detectar TODOS los mensajes del backend
-    let checkCount = 0;
-
-    const checkDesignStatus = async () => {
-      if (!monitoringActive) return;
-
-      checkCount++;
-      console.log(`🔍 Verificación ${checkCount} para diseño: ${designUuid}`);
-
-      try {
-        // 1. Verificar mensajes nuevos
-        const messagesResponse = await axios.get<ApiResponse<MessagesResponse>>(
-          `http://localhost:8081/designs/${designUuid}/messages`,
-          {
-            withCredentials: true,
-            timeout: 8000,
-          }
-        );
-
-        if (
-          messagesResponse.data.success &&
-          messagesResponse.data.data?.messages
-        ) {
-          const newMessages = messagesResponse.data.data.messages;
-
-          if (newMessages.length !== lastMessageCount) {
-            console.log(
-              `💬 Sincronizando mensajes: Backend: ${newMessages.length}, Local: ${lastMessageCount}`
+  console.log("🔍 Iniciando monitoreo mejorado para:", designUuid);
+  setIsGenerating(true);
+ 
+  let monitoringActive = true;
+  let consecutiveErrors = 0;
+  let lastMessageCount = 0;
+  let checkCount = 0;
+ 
+  // ── Helper: marcar SVG como listo y detener monitoreo ──────────
+  const markSvgReady = (filesFromApi?: any[]) => {
+    setDesignData((prev) => {
+      if (!prev) return null;
+ 
+      // Usar archivos del API si existen, si no crear entrada SVG por defecto
+      const readyFiles =
+        filesFromApi && filesFromApi.length > 0
+          ? filesFromApi.map((f) => ({
+              type: f.fileType ?? f.type ?? "svg",
+              status: "ready" as const,
+              // "svg_ready" es una señal interna para que handleDownloadFile
+              // use el endpoint /svg2d en lugar de la URL almacenada en BD
+              url: "svg_ready",
+              progress: 100,
+            }))
+          : [{ type: "svg", status: "ready" as const, url: "svg_ready", progress: 100 }];
+ 
+      return { ...prev, status: "ready", files: readyFiles };
+    });
+ 
+    monitoringActive = false;
+    setIsGenerating(false);
+    console.log("✅ SVG marcado como listo — monitoreo detenido");
+  };
+ 
+  const checkDesignStatus = async () => {
+    if (!monitoringActive) return;
+    checkCount++;
+    console.log(`🔍 Verificación ${checkCount} para diseño: ${designUuid}`);
+ 
+    try {
+      // ── 1. Sincronizar mensajes ─────────────────────────────────
+      const messagesResponse = await axios.get<ApiResponse<MessagesResponse>>(
+        `http://localhost:8081/designs/${designUuid}/messages`,
+        { withCredentials: true, timeout: 8000 }
+      );
+ 
+      if (
+        messagesResponse.data.success &&
+        messagesResponse.data.data?.messages
+      ) {
+        const newMessages = messagesResponse.data.data.messages;
+ 
+        if (newMessages.length !== lastMessageCount) {
+          console.log(`💬 Sincronizando mensajes: Backend: ${newMessages.length}`);
+          lastMessageCount = newMessages.length;
+ 
+          setMessages((currentMessages) => {
+            const allMessagesMap = new Map();
+            currentMessages.forEach((msg) => allMessagesMap.set(msg.uuid, msg));
+            newMessages.forEach((msg) => allMessagesMap.set(msg.uuid, msg));
+            const combined = Array.from(allMessagesMap.values());
+            const sorted = combined.sort(
+              (a, b) =>
+                new Date(a.createdAt).getTime() -
+                new Date(b.createdAt).getTime()
             );
-            
-            // Actualizar contador de mensajes
-            lastMessageCount = newMessages.length;
-
-            // CRÍTICO: SIEMPRE sincronizar con el backend
-            setMessages((currentMessages) => {
-              console.log(`📝 Mensajes actuales: ${currentMessages.length}`);
-              console.log(`📨 Mensajes del backend: ${newMessages.length}`);
-              
-              // Crear un mapa de todos los mensajes del backend por UUID
-              const backendMessagesMap = new Map();
-              newMessages.forEach(msg => backendMessagesMap.set(msg.uuid, msg));
-              
-              // Crear un mapa de mensajes actuales por UUID
-              const currentMessagesMap = new Map();
-              currentMessages.forEach(msg => currentMessagesMap.set(msg.uuid, msg));
-              
-              // Combinar todos los mensajes sin duplicados
-              const allMessagesMap = new Map();
-              
-              // Primero agregar mensajes actuales
-              currentMessages.forEach(msg => allMessagesMap.set(msg.uuid, msg));
-              
-              // Luego agregar/actualizar con mensajes del backend
-              newMessages.forEach(msg => allMessagesMap.set(msg.uuid, msg));
-              
-              // Convertir de vuelta a array y ordenar cronológicamente
-              const combinedMessages = Array.from(allMessagesMap.values());
-              const sortedMessages = combinedMessages.sort((a, b) => 
-                new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-              );
-              
-              console.log(`🔄 Mensajes finales: ${sortedMessages.length}`);
-              console.log(`📋 Roles: ${sortedMessages.map(m => `${m.role}(${m.content.substring(0, 30)}...)`).join(', ')}`);
-              
-              return sortedMessages;
-            });
-
-            consecutiveErrors = 0;
+            return ensureRenderMessage(sorted);
+          });
+ 
+          consecutiveErrors = 0;
+ 
+          // ✅ DETECCIÓN RÁPIDA: buscar mensaje del backend que indique
+          // que el SVG fue generado (contiene metadata.files con SVG)
+          const svgGeneratedMessage = newMessages.find(
+            (msg) =>
+              msg.role === "assistant" &&
+              msg.metadata?.files?.some(
+                (f: any) => f.fileType === "svg" || f.fileType === "image"
+              )
+          );
+ 
+          if (svgGeneratedMessage) {
+            console.log(
+              "🎉 SVG detectado en mensaje del backend — marcando como listo"
+            );
+            const svgFiles = svgGeneratedMessage.metadata?.files?.filter(
+              (f: any) => f.fileType === "svg" || f.fileType === "image"
+            );
+            markSvgReady(svgFiles);
+            return; // Salir temprano, ya terminamos
+          }
+ 
+          // ✅ DETECCIÓN ALTERNATIVA: structuralData presente en algún mensaje
+          // significa que el plano fue generado exitosamente
+          const hasStructuralData = newMessages.some(
+            (msg) =>
+              (msg.metadata?.structuralData?.rooms?.length ?? 0) > 0
+          );
+ 
+          if (hasStructuralData && checkCount > 1) {
+            console.log("🎉 structuralData detectado — marcando SVG como listo");
+            markSvgReady();
+            return;
           }
         }
-
-        // 2. Verificar estado del diseño
-        const designResponse = await axios.get<ApiResponse<GetDesignData>>(
-          `http://localhost:8081/designs/${designUuid}`,
-          {
-            withCredentials: true,
-            timeout: 8000,
-          }
-        );
-
-        if (designResponse.data.success && designResponse.data.data) {
-          const design = designResponse.data.data.design;
-
+      }
+ 
+      // ── 2. Verificar estado del diseño ─────────────────────────
+      const designResponse = await axios.get<ApiResponse<GetDesignData>>(
+        `http://localhost:8081/designs/${designUuid}`,
+        { withCredentials: true, timeout: 8000 }
+      );
+ 
+      if (designResponse.data.success && designResponse.data.data) {
+        const design = designResponse.data.data.design;
+ 
+        const allFilesReady = design.files?.every((f) => f.status === "ready");
+        const hasFiles = design.files && design.files.length > 0;
+        const designCompleted =
+          design.status === "completed" || design.status === "ready";
+ 
+        // Actualizar progreso si aún generando
+        if (!designCompleted) {
           setDesignData((prev) =>
             prev
               ? {
                   ...prev,
-                  status: design.status === "active" ? "generating" : "ready",
+                  status: "generating",
                   files:
                     design.files?.map((file) => ({
                       type: file.fileType,
                       status: file.status as "generating" | "ready" | "error",
-                      url: file.downloadUrl,
+                      url: "svg_ready",
                       progress:
                         file.status === "ready"
                           ? 100
-                          : file.status === "generating"
-                          ? Math.min(90, 20 + checkCount * 5)
-                          : 0,
-                    })) || [],
+                          : Math.min(90, 20 + checkCount * 5),
+                    })) ||
+                    (prev.files ?? []).map((f) => ({   // ← aquí el fix
+                      ...f,
+                      progress: Math.min(90, 20 + checkCount * 5),
+                    })),
                 }
               : null
           );
-
-          const allFilesReady = design.files?.every(
-            (f) => f.status === "ready"
-          );
-          const hasFiles = design.files && design.files.length > 0;
-          const designCompleted =
-            design.status === "completed" || design.status === "ready";
-
-          if ((allFilesReady && hasFiles) || designCompleted) {
-            console.log("✅ Diseño completado. Deteniendo monitoreo.");
-            monitoringActive = false;
-            setIsGenerating(false);
-
-          }
         }
-
-        consecutiveErrors = 0;
-      } catch (error: any) {
-        consecutiveErrors++;
-        console.error(`❌ Error en monitoreo (${consecutiveErrors}/3):`, error);
-
-        if (consecutiveErrors >= 3) {
-          console.log("⚠️ Demasiados errores. Deteniendo monitoreo.");
-          monitoringActive = false;
-          setIsGenerating(false);
-
-          setMessages((prev) => [
-            ...prev,
-            {
-              uuid: generateUUID(),
-              role: "assistant",
-              content: t('chat.connectionIssues'),
-              status: "error",
-              createdAt: new Date().toISOString(),
-            },
-          ]);
+ 
+        // ✅ Diseño completado → marcar SVG como listo
+        if ((allFilesReady && hasFiles) || designCompleted) {
+          console.log("✅ Diseño completado según API. Marcando SVG como listo.");
+          markSvgReady(hasFiles ? design.files : undefined);
+          return;
         }
       }
-    };
-
-    checkDesignStatus();
-
-    const interval = setInterval(() => {
-      if (monitoringActive) {
-        checkDesignStatus();
-      } else {
-        clearInterval(interval);
-      }
-    }, 4000);
-
-    setTimeout(() => {
-      if (monitoringActive) {
+ 
+      consecutiveErrors = 0;
+    } catch (error: any) {
+      consecutiveErrors++;
+      console.error(`❌ Error en monitoreo (${consecutiveErrors}/3):`, error);
+ 
+      if (consecutiveErrors >= 3) {
+        console.log("⚠️ Demasiados errores. Deteniendo monitoreo.");
         monitoringActive = false;
-        clearInterval(interval);
         setIsGenerating(false);
-
         setMessages((prev) => [
           ...prev,
           {
             uuid: generateUUID(),
             role: "assistant",
-            content: t('chat.processTimeout'),
-            status: "completed",
+            content: t("chat.connectionIssues"),
+            status: "error",
             createdAt: new Date().toISOString(),
           },
         ]);
       }
-    }, 300000); // 5 minutos para procesamiento NLP complejo
+    }
   };
+ 
+  checkDesignStatus();
+ 
+  const interval = setInterval(() => {
+    if (monitoringActive) {
+      checkDesignStatus();
+    } else {
+      clearInterval(interval);
+    }
+  }, 4000);
+ 
+  // Timeout de 5 minutos
+  setTimeout(() => {
+    if (monitoringActive) {
+      monitoringActive = false;
+      clearInterval(interval);
+      setIsGenerating(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          uuid: generateUUID(),
+          role: "assistant",
+          content: t("chat.processTimeout"),
+          status: "completed",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    }
+  }, 300000);
+};
+  
 
   // 🔧 FUNCIONES AUXILIARES
   const detectDesignType = (message: string): string => {
@@ -1475,83 +1511,106 @@ const Chat: React.FC = () => {
   };
 
   // 📥 NUEVA: Función para descargar archivos
-  const handleDownloadFile = async (downloadUrl: string) => {
-    if (!downloadUrl) {
-      console.error('❌ URL de descarga no disponible');
-      return;
-    }
-
+  const handleDownloadFile = async (downloadUrl: string, fileType?: string) => {
+  const currentDesignId = designData?.uuid ?? designId;
+ 
+  // ✅ SVG: siempre usar el endpoint /svg2d que ya funciona
+  // El endpoint /api/files/download/... busca "floor_plan.svg" pero el archivo
+  // real se llama "${designId}_plan_2d.svg" — por eso devuelve JSON de error.
+  const isSvg =
+    fileType === "svg" ||
+    fileType === "image" ||
+    downloadUrl === "svg_ready" ||
+    (downloadUrl && (downloadUrl.includes(".svg") || downloadUrl.includes("svg")));
+ 
+  if (isSvg && currentDesignId) {
     try {
-      console.log('📥 Iniciando descarga:', downloadUrl);
-      
-      // Construir URL completa si es necesario
-      const fullUrl = downloadUrl.startsWith('http') 
-        ? downloadUrl 
-        : `http://localhost:8081${downloadUrl}`;
-
-      // Usar fetch para descargar con credenciales
-      const response = await fetch(fullUrl, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Accept': '*/*',
-        }
-      });
-
+      console.log("📥 Descargando SVG desde /designs/:id/svg2d ...");
+ 
+      const response = await fetch(
+        `http://localhost:8081/designs/${currentDesignId}/svg2d`,
+        { method: "GET", credentials: "include" }
+      );
+ 
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-
-      // Obtener el blob del archivo
-      const blob = await response.blob();
-      
-      // Obtener el nombre del archivo desde el header o URL
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = 'archivo_descargado';
-      
-      if (contentDisposition && contentDisposition.includes('filename=')) {
-        const matches = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (matches && matches[1]) {
-          filename = matches[1];
-        }
+ 
+      const json = await response.json();
+ 
+      if (json.success && json.data?.svg) {
+        // Convertir el string SVG en un archivo descargable real
+        const blob = new Blob([json.data.svg], {
+          type: "image/svg+xml;charset=utf-8",
+        });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `plano_arquitectonico_${currentDesignId.slice(0, 8)}.svg`;
+        document.body.appendChild(link);
+        link.click();
+        window.URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(link);
+        console.log("✅ SVG descargado exitosamente como imagen vectorial");
+        return;
       } else {
-        // Extraer nombre del archivo de la URL
-        const urlParts = downloadUrl.split('/');
-        const lastPart = urlParts[urlParts.length - 1];
-        if (lastPart) {
-          filename = lastPart;
-        }
+        throw new Error("El servidor no devolvió contenido SVG válido");
       }
-
-      // Crear enlace de descarga
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      
-      // Limpiar
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(link);
-      
-      console.log('✅ Descarga completada:', filename);
-
     } catch (error) {
-      console.error('❌ Error descargando archivo:', error);
-      
-      // Fallback: abrir en nueva ventana
-      try {
-        const fullUrl = downloadUrl.startsWith('http') 
-          ? downloadUrl 
-          : `http://localhost:8081${downloadUrl}`;
-        window.open(fullUrl, '_blank');
-      } catch (fallbackError) {
-        console.error('❌ Error en fallback:', fallbackError);
-        alert('Error al descargar el archivo. Por favor, intenta nuevamente.');
-      }
+      console.error("❌ Error descargando SVG:", error);
+      alert(
+        "Error al descargar el plano SVG. Por favor, intenta nuevamente."
+      );
     }
-  };
+    return;
+  }
+ 
+  // Para otros tipos de archivo (fallback)
+  if (!downloadUrl) {
+    console.error("❌ URL de descarga no disponible");
+    return;
+  }
+ 
+  try {
+    const fullUrl = downloadUrl.startsWith("http")
+      ? downloadUrl
+      : `http://localhost:8081${downloadUrl}`;
+ 
+    const response = await fetch(fullUrl, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "*/*" },
+    });
+ 
+    if (!response.ok) throw new Error(`Error ${response.status}`);
+ 
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = "archivo_descargado";
+    if (contentDisposition?.includes("filename=")) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match?.[1]) filename = match[1];
+    } else {
+      const parts = downloadUrl.split("/");
+      const last = parts[parts.length - 1];
+      if (last) filename = last;
+    }
+ 
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+    console.log("✅ Archivo descargado:", filename);
+  } catch (error) {
+    console.error("❌ Error descargando archivo:", error);
+    alert("Error al descargar el archivo. Por favor, intenta nuevamente.");
+  }
+};
+ 
 
   // 🆕 NUEVA: Función para generar archivos 2D/3D con OpenAI NLP
   const handleGenerateNLP2D3D = async () => {
@@ -1588,7 +1647,7 @@ const Chat: React.FC = () => {
     const processingMessage: Message = {
       uuid: generateUUID(),
       role: "assistant",
-      content: "🚀 **Procesando con IA avanzada...**\n\n🤖 Analizando descripción con OpenAI GPT-4o-mini\n📊 Extrayendo datos estructurales\n🎯 Generando archivos SVG (2D) y STL (3D)\n\n⏳ Esto puede tomar unos momentos...",
+      content: "🚀 **Procesando con IA avanzada...**\n\n🤖 Analizando descripción con OpenAI GPT-4o-mini\n📊 Extrayendo datos estructurales\n🎯 Generando plano arquitectónico SVG (2D)\n\n⏳ Esto puede tomar unos momentos...",
       status: "processing",
       createdAt: new Date().toISOString(),
     };
@@ -1973,23 +2032,19 @@ const Chat: React.FC = () => {
                             {designData.files.map((file, index) => (
                               <div key={index} className="chat-file-progress">
                                 <div className="chat-file-info">
-                                  <div className="chat-file-icon">
-                                    {file.type === "svg" ? "🎨" : file.type === "stl" ? "🏗️" : "📄"}
-                                  </div>
+                                  <div className="chat-file-icon">🎨</div>
                                   <div className="chat-file-details">
-                                    <span className="chat-file-name">
-                                      {file.type === "svg" ? "Plano 2D" : file.type === "stl" ? "Modelo 3D" : file.type.toUpperCase()}
-                                    </span>
+                                    <span className="chat-file-name">Plano Arquitectónico 2D</span>
                                     <span className="chat-file-type">
                                       {file.type.toUpperCase()}
                                     </span>
                                   </div>
                                 </div>
-                                
+                      
                                 <div className="chat-file-status">
                                   {file.status === "generating" ? (
                                     <div className="chat-file-progress-bar">
-                                      <div 
+                                      <div
                                         className="chat-file-progress-fill"
                                         style={{ width: `${file.progress || 0}%` }}
                                       ></div>
@@ -1998,11 +2053,12 @@ const Chat: React.FC = () => {
                                       </span>
                                     </div>
                                   ) : file.status === "ready" ? (
-                                    <button 
+                                    // ✅ CAMBIO: pasar file.type al handler para forzar descarga SVG real
+                                    <button
                                       className="chat-download-button"
-                                      onClick={() => handleDownloadFile(file.url || '')}
+                                      onClick={() => handleDownloadFile(file.url || "svg_ready", file.type)}
                                     >
-                                      📥 Descargar
+                                      📥 Descargar SVG
                                     </button>
                                   ) : (
                                     <span className="chat-file-error">❌ Error</span>
@@ -2010,6 +2066,28 @@ const Chat: React.FC = () => {
                                 </div>
                               </div>
                             ))}
+                          </div>
+                        )}
+                      
+                        {designData.status === "ready" && (!designData.files || designData.files.length === 0) && (
+                          <div className="chat-progress-files">
+                            <div className="chat-file-progress">
+                              <div className="chat-file-info">
+                                <div className="chat-file-icon">🎨</div>
+                                <div className="chat-file-details">
+                                  <span className="chat-file-name">Plano Arquitectónico 2D</span>
+                                  <span className="chat-file-type">SVG</span>
+                                </div>
+                              </div>
+                              <div className="chat-file-status">
+                                <button
+                                  className="chat-download-button"
+                                  onClick={() => handleDownloadFile("svg_ready", "svg")}
+                                >
+                                  📥 Descargar SVG
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
 
@@ -2021,12 +2099,6 @@ const Chat: React.FC = () => {
                               onClick={() => handleConvertFiles("svg", "pdf")}
                             >
                               � Convertir SVG a PDF
-                            </button>
-                            <button 
-                              className="chat-action-button"
-                              onClick={() => handleConvertFiles("stl", "obj")}
-                            >
-                              🎨 Convertir STL a OBJ
                             </button>
                           </div>
                         )}

@@ -10,34 +10,25 @@ import { generateDxfFile } from "../FileGenerators/DxfGenerator";
 export class DesignFileService {
   
   /**
-   * Genera archivos descargables para un diseño
+   * Genera archivos descargables para un diseño - Solo SVG
    */
   static async generateDownloadableFiles(layoutData: any, designId: string) {
     const files: Record<string, string> = {};
     
     try {
-      // Generar archivos en paralelo
-      const [pdfBuffer, dxfContent, threeJSJson, svgContent] = await Promise.all([
-        this.generateRealisticPDF(layoutData, designId),
-        this.generateDXF(layoutData, designId),
-        this.generateThreeJSFile(layoutData, designId),
+      // Generar solo SVG
+      const [svgContent] = await Promise.all([
         this.generateSVG(layoutData, designId)
       ]);
 
       const basePath = `uploads/designs/${designId}`;
       
-      files.pdf = await this.saveFile(basePath, 'floor_plan.pdf', pdfBuffer);
-      files.dxf = await this.saveFile(basePath, 'floor_plan.dxf', dxfContent);
-      files.threejs = await this.saveFile(basePath, 'model_3d.json', threeJSJson);
       files.svg = await this.saveFile(basePath, 'floor_plan.svg', svgContent);
       
       return {
         success: true,
         files,
         downloadUrls: {
-          pdf: `/api/designs/${designId}/download/pdf`,
-          dxf: `/api/designs/${designId}/download/dxf`,
-          threejs: `/api/designs/${designId}/download/threejs`,
           svg: `/api/designs/${designId}/download/svg`
         }
       };
@@ -88,37 +79,19 @@ export class DesignFileService {
       let contentType: string;
       let filename: string;
 
-      // ✅ CORRECCIÓN: Usar string en lugar de comparar directamente con FileType
+      // ✅ Solo aceptamos SVG
       const fileType = file.fileType as string;
 
-      switch (fileType) {
-        case 'pdf':
-          filePath = path.join(basePath, 'floor_plan.pdf');
-          contentType = 'application/pdf';
-          filename = `plano_${designId}.pdf`;
-          break;
-        case 'dxf':
-          filePath = path.join(basePath, 'floor_plan.dxf');
-          contentType = 'application/dxf';
-          filename = `plano_${designId}.dxf`;
-          break;
-        case 'threejs':
-        case 'json': // ✅ Agregar alias para compatibilidad
-          filePath = path.join(basePath, 'model_3d.json');
-          contentType = 'application/json';
-          filename = `modelo_3d_${designId}.json`;
-          break;
-        case 'svg':
-          filePath = path.join(basePath, 'floor_plan.svg');
-          contentType = 'image/svg+xml';
-          filename = `plano_${designId}.svg`;
-          break;
-        default:
-          return {
-            success: false,
-            error: 'Tipo de archivo no soportado'
-          };
+      if (fileType !== 'svg') {
+        return {
+          success: false,
+          error: 'Solo está disponible la descarga de archivos SVG'
+        };
       }
+
+      filePath = path.join(basePath, 'floor_plan.svg');
+      contentType = 'image/svg+xml';
+      filename = `plano_${designId}.svg`;
 
       // Verificar si el archivo existe en disco
       if (!fs.existsSync(filePath)) {

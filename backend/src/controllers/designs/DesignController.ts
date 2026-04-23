@@ -368,7 +368,7 @@ export const createDesign = async (req: Request, res: Response) => {
     //   console.error("❌ Error generando archivos:", error);
     // });
 
-    console.log("🗂️ Generación de archivos automática deshabilitada - Solo NLP SVG/STL");
+    console.log("🗂️ Generación de archivos automática deshabilitada - Solo NLP SVG");
 
     // 🔥 ESTRUCTURA CORRECTA PARA EL FRONTEND CON STRUCTURALDATA
     res.status(201).json({
@@ -397,7 +397,7 @@ export const createDesign = async (req: Request, res: Response) => {
         },
         plan: plan,
         structuralData: structuralData, // 🔥 ENVIAR STRUCTURALDATA AL FRONTEND para visualización instantánea
-        files: generatedFiles, // 🔥 Información de archivos generados (SVG, STL)
+        files: generatedFiles, // 🔥 Información de archivos generados (SVG)
       },
     });
   } catch (error) {
@@ -1419,7 +1419,7 @@ async function processAIResponse(
       // generateDesignFiles(design.uuid, design.type).catch((error) => {
       //   console.error("❌ Error generando archivos:", error);
       // });
-      console.log("🗂️ Generación automática deshabilitada - Solo NLP SVG/STL");
+      console.log("🗂️ Generación automática deshabilitada - Solo NLP SVG");
     }
 
     console.log("✅ Respuesta de IA procesada exitosamente");

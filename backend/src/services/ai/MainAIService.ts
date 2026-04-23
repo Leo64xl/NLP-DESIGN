@@ -8,12 +8,12 @@ import OpenAIArchitecturalService, { FileGenerationResult } from './OpenAIArchit
 export class MainAIService {
   
   /**
-   * Genera un plan arquitectónico usando OpenAI
+   * Genera un plan arquitectónico usando OpenAI (SVG solo)
    */
   static async generatePlan(
     prompt: ArchitecturalPrompt,
     designUuid: string  
-  ): Promise<{plan: ArchitecturalPlan, structuralData: any, files: {svg: string, stl: string}}> {
+  ): Promise<{plan: ArchitecturalPlan, structuralData: any, files: {svg: string}}> {
     console.log('🚀 Iniciando generación de plan arquitectónico con OpenAI...');
     
     try {
@@ -41,13 +41,13 @@ export class MainAIService {
       // Convertir resultado de OpenAI al formato ArchitecturalPlan esperado
       const architecturalPlan = this.convertOpenAIToArchitecturalPlan(result, prompt);
       
-      console.log('✅ Plan generado exitosamente con OpenAI');
+      console.log('✅ Plan generado exitosamente con OpenAI (SVG)');
       
       // Devolver plan Y structuralData completo para visualización instantánea
       return {
         plan: architecturalPlan,
         structuralData: result.structuralData,
-        files: result.files
+        files: { svg: result.files.svg }
       };
       
     } catch (error) {
@@ -58,14 +58,14 @@ export class MainAIService {
   }
 
   /**
-   * Genera archivos 2D/3D usando OpenAI NLP
+   * Genera archivos 2D (SVG) usando OpenAI NLP
    */
   static async generateNLP2D3DFiles(
     userDescription: string,
     designId: string,
     outputDirectory: string
   ): Promise<FileGenerationResult> {
-    console.log('🎨 Generando archivos 2D/3D con OpenAI NLP...');
+    console.log('🎨 Generando archivos 2D (SVG) con OpenAI NLP...');
     
     try {
       const result = await OpenAIArchitecturalService.processNLPToFiles(

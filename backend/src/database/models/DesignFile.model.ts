@@ -1,7 +1,7 @@
 import { DataTypes, Model } from 'sequelize';
 import db from '../Configuration.db';
 
-export type FileType = 'image' | 'pdf' | 'dwg' | 'dxf' | 'skp' | 'obj' | 'fbx' | 'gltf' | 'json' | 'mtl' | 'svg' | 'stl';
+export type FileType = 'image' | 'pdf' | 'dwg' | 'dxf' | 'skp' | 'obj' | 'fbx' | 'gltf' | 'json' | 'mtl' | 'svg' ;
 export type FileStatus = 'generating' | 'ready' | 'error' | 'deleted';
 
 export interface DesignFileAttributes {
@@ -108,10 +108,10 @@ DesignFile.init(
     
     // 🎯 ACTUALIZAR ENUM PARA INCLUIR TODOS LOS TIPOS
     fileType: {
-      type: DataTypes.ENUM('image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl', 'svg', 'stl'),
+      type: DataTypes.ENUM('image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl', 'svg'),
       allowNull: false,
       validate: {
-        isIn: [['image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl', 'svg', 'stl']]
+        isIn: [['image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl', 'svg']]
       }
     },
     

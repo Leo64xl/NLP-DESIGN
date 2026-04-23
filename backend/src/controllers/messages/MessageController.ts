@@ -234,32 +234,8 @@ export const sendArchitecturalMessage = async (req: Request, res: Response) => {
                     createdFiles.push(svgFile);
                 }
 
-                // Archivo STL (3D)
-                if (nlpResult.files.stl && fs.existsSync(nlpResult.files.stl)) {
-                    const stlStats = fs.statSync(nlpResult.files.stl);
-                    const stlFileUuid = uuidv4();
-                    const stlFile = await DesignFile.create({
-                        uuid: stlFileUuid,
-                        filename: path.basename(nlpResult.files.stl),
-                        originalName: `model_3d.stl`,
-                        fileType: 'stl' as ModelFileType,
-                        fileSize: stlStats.size,
-                        filePath: nlpResult.files.stl,
-                        downloadUrl: `/api/files/download/${stlFileUuid}`,
-                        downloadCount: 0,
-                        status: 'ready',
-                        designId: designUuid,
-                        messageId: userMessage.uuid,
-                        metadata: {
-                            generatedAt: new Date().toISOString(),
-                            aiGenerated: true,
-                            generationMethod: 'openai-nlp',
-                            fileType: '3d',
-                            description: 'Modelo 3D arquitectónico generado con OpenAI'
-                        }
-                    });
-                    createdFiles.push(stlFile);
-                }
+                // Solo SVG es generado ahora
+                // Bloque de STL eliminado - solo se genera SVG para planos arquitectónicos
 
                 // Actualizar estado del diseño
                 await design.update({ status: 'completed' });
@@ -437,7 +413,7 @@ export const generateNLP2D3DFiles = async (req: Request, res: Response) => {
                 uuid: generateUUID(),
                 designId: designUuid,
                 role: 'assistant',
-                content: `✅ **Archivos generados exitosamente con IA avanzada**\n\n🎯 **Procesamiento completado:**\n• Análisis NLP: ${nlpResult.processingTime}ms\n• Archivo 2D: ${nlpResult.files.svg ? '✅ SVG generado' : '❌ Error'}\n• Archivo 3D: ${nlpResult.files.stl ? '✅ STL generado' : '❌ Error'}\n\n📊 **Datos estructurales extraídos:**\n• Habitaciones: ${nlpResult.structuralData.rooms.length}\n• Área total: ${nlpResult.structuralData.metadata.totalArea}m²\n• Conexiones: ${nlpResult.structuralData.connections?.length || 0}\n\n💾 Los archivos están listos para descarga.`,
+                content: `✅ **Plano Arquitectónico Generado con IA Avanzada**\n\n🎯 **Procesamiento completado:**\n• Análisis NLP: ${nlpResult.processingTime}ms\n• Plano 2D (SVG): ${nlpResult.files.svg ? '✅ SVG generado' : '❌ Error'}\n\n📊 **Datos estructurales extraídos:**\n• Habitaciones: ${nlpResult.structuralData.rooms.length}\n• Área total: ${nlpResult.structuralData.metadata.totalArea}m²\n• Conexiones: ${nlpResult.structuralData.connections?.length || 0}\n\n💾 Tu plano arquitectónico en formato SVG está listo para descargar.`,
                 status: 'completed',
                 metadata: {
                     timestamp: new Date().toISOString(),
@@ -454,7 +430,6 @@ export const generateNLP2D3DFiles = async (req: Request, res: Response) => {
             
             console.log('🔍 Verificando archivos existentes...');
             console.log('SVG existe:', nlpResult.files.svg && fs.existsSync(nlpResult.files.svg));
-            console.log('STL existe:', nlpResult.files.stl && fs.existsSync(nlpResult.files.stl));
             
             const dbStartTime = Date.now();
             
@@ -492,39 +467,8 @@ export const generateNLP2D3DFiles = async (req: Request, res: Response) => {
                 }
             }
 
-            // Archivo STL (3D)
-            if (nlpResult.files.stl && fs.existsSync(nlpResult.files.stl)) {
-                console.log('💾 Guardando archivo STL en base de datos...');
-                const stlStats = fs.statSync(nlpResult.files.stl);
-                
-                try {
-                    const stlFile = await DesignFile.create({
-                    uuid: uuidv4(),
-                    filename: path.basename(nlpResult.files.stl),
-                    originalName: `${designId}_3d_model.stl`,
-                    fileType: 'stl' as ModelFileType,
-                    fileSize: stlStats.size,
-                    filePath: nlpResult.files.stl,
-                    downloadUrl: `/api/files/download/${designUuid}/${path.basename(nlpResult.files.stl)}`,
-                    downloadCount: 0,
-                    status: 'ready',
-                    designId: designUuid,
-                    messageId: userMessage.uuid,
-                    metadata: {
-                        generatedAt: new Date().toISOString(),
-                        aiGenerated: true,
-                        generationMethod: 'openai-nlp',
-                        fileType: '3d',
-                        description: 'Modelo 3D arquitectónico generado con IA'
-                    }
-                });
-                createdFiles.push(stlFile);
-                console.log('✅ Archivo STL guardado en base de datos');
-                } catch (stlError) {
-                    console.error('❌ Error guardando STL en BD:', stlError);
-                    throw stlError;
-                }
-            }
+            // Solo SVG es generado - STL eliminado
+            // Bloque de generación STL removido
 
             const dbTime = Date.now() - dbStartTime;
             console.log(`📊 Total archivos creados en BD: ${createdFiles.length} (${dbTime}ms)`);
