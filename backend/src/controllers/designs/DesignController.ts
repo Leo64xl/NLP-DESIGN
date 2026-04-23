@@ -259,7 +259,8 @@ export const createDesign = async (req: Request, res: Response) => {
     console.log("🚀 Generando plan con IA...");
 
     // Generar plan usando OpenAI - Ahora devuelve plan + structuralData + files
-    const generationResult = await MainAIService.generatePlan(prompt);
+    const designUuid = crypto.randomUUID(); // generar AQUÍ el UUID para usarlo en el servicio de IA
+    const generationResult = await MainAIService.generatePlan(prompt, designUuid);
     const plan = generationResult.plan;
     const structuralData = generationResult.structuralData;
     const generatedFiles = generationResult.files;
@@ -268,7 +269,7 @@ export const createDesign = async (req: Request, res: Response) => {
 
     // Crear diseño en base de datos
     const design = await Design.create({
-      uuid: crypto.randomUUID(),
+      uuid: designUuid,
       userId: req.userId || "",
       title: plan.metadata.title,
       description: plan.description,
@@ -299,6 +300,41 @@ export const createDesign = async (req: Request, res: Response) => {
     });
 
     console.log("💾 Diseño guardado en base de datos");
+
+    const svgFilename = `${designUuid}_plan_2d.svg`;
+    const svgFullPath = path.join(process.cwd(), 'uploads', 'designs', designUuid, svgFilename);
+
+    // Guardar archivos generados en el sistema de archivos
+    if (fs.existsSync(svgFullPath)) {
+      await DesignFile.create({
+        uuid: uuidv4(),
+        designId: designUuid,
+        filename: svgFilename,
+        filePath: svgFullPath,         // ruta absoluta que usa getSvg2DFile
+        fileType: 'svg',               // ← el endpoint filtra por este campo
+        status: 'ready',
+        downloadUrl: `/designs/${designUuid}/svg2d`,
+        downloadCount: 0,
+        originalName: 'plan_2d.svg',
+        fileSize: fs.statSync(svgFullPath).size,
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          fileFormat: 'SVG'
+        },
+      });
+      console.log("✅ SVG registrado correctamente en DB");
+    } else {
+      // ❌ Antes: fs.readdirSync(...) — crashea si la carpeta no existe
+      // ✅ Ahora:
+      console.warn("⚠️ SVG no encontrado en:", svgFullPath);
+      const folder = path.join(process.cwd(), 'uploads', 'designs', designUuid);
+      if (fs.existsSync(folder)) {
+        console.log("📁 Archivos en carpeta:", fs.readdirSync(folder));
+      } else {
+        console.error("❌ La carpeta del diseño tampoco existe:", folder);
+      }
+    }
+
 
     // Crear mensaje inicial del asistente
     const initialMessage = await Message.create({
@@ -387,6 +423,22 @@ export const convertDesignFormat = async (req: Request, res: Response) => {
         action: "select_valid_format",
         validFormats: ["2d", "3d", "both"],
       });
+    }
+
+    // Helper: busca un archivo por nombre en subdirectorios
+    function findFileRecursive(baseDir: string, filename: string): string | null {
+      if (!fs.existsSync(baseDir)) return null;
+      const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(baseDir, entry.name);
+        if (entry.isDirectory()) {
+          const found = findFileRecursive(fullPath, filename);
+          if (found) return found;
+        } else if (entry.name === filename) {
+          return fullPath;
+        }
+      }
+      return null;
     }
 
     const design = await Design.findOne({

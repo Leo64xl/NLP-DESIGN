@@ -1,3 +1,4 @@
+import path from 'path';
 import { ArchitecturalPrompt, ArchitecturalPlan } from './ConfigAI';
 import OpenAIArchitecturalService, { FileGenerationResult } from './OpenAIArchitecturalService';
 
@@ -9,7 +10,10 @@ export class MainAIService {
   /**
    * Genera un plan arquitectónico usando OpenAI
    */
-  static async generatePlan(prompt: ArchitecturalPrompt): Promise<{plan: ArchitecturalPlan, structuralData: any, files: {svg: string, stl: string}}> {
+  static async generatePlan(
+    prompt: ArchitecturalPrompt,
+    designUuid: string  
+  ): Promise<{plan: ArchitecturalPlan, structuralData: any, files: {svg: string, stl: string}}> {
     console.log('🚀 Iniciando generación de plan arquitectónico con OpenAI...');
     
     try {
@@ -25,13 +29,13 @@ export class MainAIService {
 
       console.log('✅ OpenAI disponible, procesando con NLP to 2D/3D...');
       
-      // Crear directorio temporal para archivos
-      const outputDirectory = `uploads/designs/temp_${Date.now()}`;
+      // Usar el UUID real como carpeta de destino
+      const outputDirectory = path.join(process.cwd(), 'uploads', 'designs', designUuid);
       
       const result = await OpenAIArchitecturalService.processNLPToFiles(
         prompt.userDescription,
-        `design_${Date.now()}`,
-        outputDirectory
+        designUuid,      
+        outputDirectory  
       );
       
       // Convertir resultado de OpenAI al formato ArchitecturalPlan esperado
@@ -127,15 +131,20 @@ export class MainAIService {
           material: 'default'
         })),
         doors: structuralData.connections?.filter((c: any) => c.type === 'door').map((door: any) => ({
-          position: [door.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.x : 0, 
-                    door.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.y : 0],
+          position: [
+            door.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.x : 0, 
+            door.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.y : 0
+          ],
           size: [door.width, 2],
           rotation: 0,
           type: 'interior' as const
         })) || [],
         windows: structuralData.connections?.filter((c: any) => c.type === 'window').map((window: any) => ({
-          position: [window.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.x : 0, 
-                    window.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.y : 0, 1],
+          position: [
+            window.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.x : 0, 
+            window.from === structuralData.rooms[0]?.name ? structuralData.rooms[0].position.y : 0,
+            1
+          ],
           size: [window.width, 1.2],
           orientation: 'north' as const
         })) || [],
@@ -149,7 +158,7 @@ export class MainAIService {
         accessibility: []
       },
       estimatedCost: {
-        construction: structuralData.metadata.totalArea * 800, // Estimación básica
+        construction: structuralData.metadata.totalArea * 800,
         materials: structuralData.metadata.totalArea * 400,
         labor: structuralData.metadata.totalArea * 400,
         total: structuralData.metadata.totalArea * 1200,
@@ -185,7 +194,6 @@ export class MainAIService {
     error?: string;
   }> {
     try {
-      // Verificar OpenAI
       const openaiStatus = await OpenAIArchitecturalService.checkServiceStatus();
       
       return {

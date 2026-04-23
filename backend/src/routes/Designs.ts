@@ -277,7 +277,7 @@ router.get(
 
 // 📐 RUTA PARA OBTENER SVG 2D - VISUALIZACIÓN EN FRONTEND
 router.get(
-  "/designs/:designUuid/svg2d",
+  '/designs/:designUuid/svg2d',
   asyncHandler(verifyUser),
   asyncHandler(getSvg2DFile)
 );

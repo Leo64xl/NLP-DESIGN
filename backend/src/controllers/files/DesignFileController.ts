@@ -345,101 +345,75 @@ export const downloadFile = async (req: Request, res: Response) => {
 export const getSvg2DFile = async (req: Request, res: Response) => {
   try {
     const { designUuid } = req.params;
-    const userId = req.userId as string;
+    const userId = req.userId;
 
-    // Verificar que el diseño exista y pertenezca al usuario
     const design = await Design.findOne({
-      where: { 
-        uuid: designUuid,
-        userId: userId,
-        status: { [Op.not]: 'deleted' }
-      }
+      where: { uuid: designUuid, userId },
     });
 
     if (!design) {
-      return res.status(404).json({
-        success: false,
-        message: "Diseño no encontrado o sin acceso",
-        action: 'check_design_access'
-      });
+      return res.status(404).json({ success: false, message: 'Diseño no encontrado' });
     }
 
-    // Buscar el archivo SVG 2D
     const svgFile = await DesignFile.findOne({
-      where: {
-        designId: designUuid,
-        fileType: 'svg',
-        status: 'ready'
-      },
-      order: [['createdAt', 'DESC']]
+      where: { designId: designUuid, fileType: 'svg', status: 'ready' },
     });
 
     if (!svgFile) {
-      // Si no existe archivo SVG registrado, intentar encontrarlo en el sistema de archivos
-      const designFolder = path.join(process.cwd(), 'uploads', 'designs', designUuid);
-      const svgPattern = path.join(designFolder, '*plan_2d.svg');
-      
-      // Buscar cualquier archivo SVG en la carpeta
-      if (fs.existsSync(designFolder)) {
-        const files = fs.readdirSync(designFolder);
-        const svgFiles = files.filter(f => f.endsWith('.svg') && f.includes('plan_2d'));
-        
-        if (svgFiles.length > 0) {
-          const svgPath = path.join(designFolder, svgFiles[0]);
-          const svgContent = fs.readFileSync(svgPath, 'utf-8');
-          
-          return res.status(200).json({
-            success: true,
-            data: {
-              svg: svgContent,
-              filename: svgFiles[0],
-              designUuid: designUuid
-            },
-            action: 'svg_loaded'
-          });
-        }
+      return res.status(404).json({ success: false, message: 'SVG no encontrado en DB' });
+    }
+
+    // El filePath guardado es absoluto — úsalo directo
+    let filePath = svgFile.filePath;
+
+    // Si no existe en esa ruta, busca por nombre en la carpeta del diseño
+    if (!fs.existsSync(filePath)) {
+      const fallbackPath = path.join(
+        process.cwd(),
+        'uploads', 'designs', designUuid,
+        svgFile.filename
+      );
+      if (fs.existsSync(fallbackPath)) {
+        filePath = fallbackPath;
+      } else {
+        // Búsqueda recursiva en uploads/designs como último recurso
+        const uploadsBase = path.join(process.cwd(), 'uploads', 'designs');
+        const found = findFileRecursive(uploadsBase, svgFile.filename);
+        if (found) filePath = found;
       }
-
-      return res.status(404).json({
-        success: false,
-        message: "Archivo SVG 2D no disponible",
-        action: 'generate_svg'
-      });
     }
 
-    // Leer el archivo SVG del disco
-    const svgPath = svgFile.filePath;
-    
-    if (!fs.existsSync(svgPath)) {
-      return res.status(404).json({
-        success: false,
-        message: "Archivo SVG no encontrado en el sistema",
-        action: 'regenerate_svg'
-      });
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'Archivo SVG no encontrado en disco' });
     }
 
-    const svgContent = fs.readFileSync(svgPath, 'utf-8');
+    const svgContent = fs.readFileSync(filePath, 'utf8');
 
     return res.status(200).json({
       success: true,
-      data: {
-        svg: svgContent,
-        filename: svgFile.filename,
-        designUuid: designUuid,
-        createdAt: svgFile.createdAt
-      },
-      action: 'svg_loaded'
+      data: { svg: svgContent },
     });
-
   } catch (error) {
-    console.error("❌ Error obteniendo SVG 2D:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error al obtener el archivo SVG",
-      action: 'retry_later'
-    });
+    console.error('❌ Error sirviendo SVG:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 };
+
+// Helper: busca un archivo por nombre en subdirectorios
+function findFileRecursive(baseDir: string, filename: string): string | null {
+  if (!fs.existsSync(baseDir)) return null;
+  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(baseDir, entry.name);
+    if (entry.isDirectory()) {
+      const found = findFileRecursive(fullPath, filename);
+      if (found) return found;
+    } else if (entry.name === filename) {
+      return fullPath;
+    }
+  }
+  return null;
+}
 
 export const generateFile = async (req: Request, res: Response) => {
   try {

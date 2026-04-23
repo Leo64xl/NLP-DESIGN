@@ -108,18 +108,19 @@ DesignFile.init(
     
     // 🎯 ACTUALIZAR ENUM PARA INCLUIR TODOS LOS TIPOS
     fileType: {
-      type: DataTypes.ENUM('image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl'),
+      type: DataTypes.ENUM('image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl', 'svg', 'stl'),
       allowNull: false,
       validate: {
-        isIn: [['image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl']]
+        isIn: [['image', 'pdf', 'dwg', 'dxf', 'skp', 'obj', 'fbx', 'gltf', 'json', 'mtl', 'svg', 'stl']]
       }
     },
     
     fileSize: {
       type: DataTypes.INTEGER,
       allowNull: false,
+      defaultValue: 0,
       validate: {
-        min: 1,
+        min: 0,
         max: 100 * 1024 * 1024
       }
     },

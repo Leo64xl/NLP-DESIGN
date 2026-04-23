@@ -43,6 +43,9 @@ interface WallSegment {
 }
 
 const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData, designUuid }) => {
+  
+  console.log('🔍 PascalNativeViewer - designUuid recibido:', designUuid);
+
   const mountRef = useRef<HTMLDivElement>(null);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const [processedData, setProcessedData] = useState<any>(null);
@@ -68,30 +71,36 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData, des
     if (!show2DView || !designUuid || svgContent) return;
 
     const fetchSvg = async () => {
-      setIsLoading2D(true);
-      try {
-        const response = await fetch(`http://localhost:8081/designs/${designUuid}/svg2d`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-          }
-        });
+    setIsLoading2D(true);
+    try {
+      console.log('📡 Fetching SVG para designUuid:', designUuid);
+      
+      const response = await fetch(`http://localhost:8081/designs/${designUuid}/svg2d`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.data?.svg) {
-            setSvgContent(data.data.svg);
-          }
+      console.log('📡 Response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📡 Response data:', data);
+        if (data.success && data.data?.svg) {
+          setSvgContent(data.data.svg);
         } else {
-          console.warn('SVG 2D no disponible:', response.status);
+          console.warn('⚠️ SVG no encontrado en respuesta:', data);
         }
-      } catch (error) {
-        console.error('Error obteniendo SVG 2D:', error);
-      } finally {
-        setIsLoading2D(false);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Error HTTP:', response.status, errorText);
       }
-    };
+    } catch (error) {
+      console.error('❌ Error fetch SVG:', error);
+    } finally {
+      setIsLoading2D(false);
+    }
+  };
 
     fetchSvg();
   }, [show2DView, designUuid, svgContent]);

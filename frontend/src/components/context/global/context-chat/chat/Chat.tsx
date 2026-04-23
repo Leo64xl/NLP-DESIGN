@@ -1926,6 +1926,7 @@ const Chat: React.FC = () => {
                             }}>
                               <PascalNativeViewer
                                 pascalData={message.metadata.structuralData}
+                                designUuid={designData?.uuid ?? designId ?? undefined}
                               />
                             </div>
                           )}
