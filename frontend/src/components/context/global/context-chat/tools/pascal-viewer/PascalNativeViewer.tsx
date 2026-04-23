@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Evaluator, Brush, SUBTRACTION } from 'three-bvh-csg';
-import { Maximize2, Minimize2, Eye, EyeOff } from 'lucide-react';
+import { Maximize2, Minimize2, Eye, EyeOff, Download, MapIcon, X } from 'lucide-react';
 
 interface PascalNativeViewerProps {
   pascalData: any;
@@ -54,6 +54,40 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData, des
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [isLoading2D, setIsLoading2D] = useState(false);
   const VISUAL_PLAN_SCALE = 1.5;
+
+  const handleDownloadSvg = useCallback(async () => {
+  let content = svgContent;
+
+    // Si aún no se cargó el SVG, lo traemos ahora
+    if (!content && designUuid) {
+      try {
+        const response = await fetch(`http://localhost:8081/designs/${designUuid}/svg2d`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: { 'Accept': 'application/json' },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          content = data?.data?.svg ?? null;
+        }
+      } catch (error) {
+        console.error('❌ Error descargando SVG:', error);
+        return;
+      }
+    }
+
+    if (!content) return;
+
+      const blob = new Blob([content], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `plano_2d_${designUuid ?? 'diseño'}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+  }, [svgContent, designUuid]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -1586,9 +1620,37 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData, des
               transition: 'all 0.3s ease'
             }}
           >
-            {show2DView ? <EyeOff size={18} /> : <Eye size={18} />}
+            {show2DView ? <X size={18} /> : <MapIcon size={18} />}
           </button>
-
+          
+          {/* 📥 BOTÓN PARA DESCARGAR SVG */}
+          <button
+            type="button"
+            onClick={handleDownloadSvg}
+            title="Descargar plano 2D (SVG)"
+            aria-label="Descargar plano 2D"
+            style={{
+              position: 'absolute',
+              top: '12px',
+              left: '108px',          
+              zIndex: 20,
+              border: '1px solid #d0d0d0',
+              borderRadius: '10px',
+              background: 'rgba(255, 255, 255, 0.92)',
+              color: '#333',
+              cursor: 'pointer',
+              width: '40px',
+              height: '40px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 3px 12px rgba(0, 0, 0, 0.18)',
+              backdropFilter: 'blur(2px)',
+            }}
+          >
+            <Download size={18} />
+          </button>  
+          
           <div
             ref={mountRef}
             style={{
