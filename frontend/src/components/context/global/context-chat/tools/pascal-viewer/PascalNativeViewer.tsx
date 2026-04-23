@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Evaluator, Brush, SUBTRACTION } from 'three-bvh-csg';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, Eye, EyeOff } from 'lucide-react';
 
 interface PascalNativeViewerProps {
   pascalData: any;
+  designUuid?: string;
 }
 
 interface RealOpening {
@@ -41,11 +42,14 @@ interface WallSegment {
   rooms: string[];
 }
 
-const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) => {
+const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData, designUuid }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const [processedData, setProcessedData] = useState<any>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [show2DView, setShow2DView] = useState(false);
+  const [svgContent, setSvgContent] = useState<string | null>(null);
+  const [isLoading2D, setIsLoading2D] = useState(false);
   const VISUAL_PLAN_SCALE = 1.5;
 
   useEffect(() => {
@@ -58,6 +62,39 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
+
+  // 📐 FETCH SVG 2D CUANDO SE SOLICITA
+  useEffect(() => {
+    if (!show2DView || !designUuid || svgContent) return;
+
+    const fetchSvg = async () => {
+      setIsLoading2D(true);
+      try {
+        const response = await fetch(`http://localhost:8081/designs/${designUuid}/svg2d`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data?.svg) {
+            setSvgContent(data.data.svg);
+          }
+        } else {
+          console.warn('SVG 2D no disponible:', response.status);
+        }
+      } catch (error) {
+        console.error('Error obteniendo SVG 2D:', error);
+      } finally {
+        setIsLoading2D(false);
+      }
+    };
+
+    fetchSvg();
+  }, [show2DView, designUuid, svgContent]);
 
   const toggleFullscreen = useCallback(async () => {
     const container = viewerContainerRef.current;
@@ -1470,45 +1507,199 @@ const PascalNativeViewer: React.FC<PascalNativeViewerProps> = ({ pascalData }) =
           height: '100%',
           flex: '1 1 auto',
           minHeight: 0,
+          display: 'flex',
+          gap: '8px'
         }}
       >
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          title={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
-          aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
+        {/* 🗂️ PANEL 3D */}
+        <div
           style={{
-            position: 'absolute',
-            top: '12px',
-            left: '12px',
-            zIndex: 20,
-            border: '1px solid #d0d0d0',
-            borderRadius: '10px',
-            background: 'rgba(255, 255, 255, 0.92)',
-            color: '#333',
-            cursor: 'pointer',
-            width: '40px',
-            height: '40px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 3px 12px rgba(0, 0, 0, 0.18)',
-            backdropFilter: 'blur(2px)',
+            position: 'relative',
+            flex: show2DView ? '1' : '1 1 auto',
+            width: show2DView ? '50%' : '100%',
+            minHeight: 0,
+            transition: 'all 0.3s ease'
           }}
         >
-          {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-        </button>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
+            aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
+            style={{
+              position: 'absolute',
+              top: '12px',
+              left: '12px',
+              zIndex: 20,
+              border: '1px solid #d0d0d0',
+              borderRadius: '10px',
+              background: 'rgba(255, 255, 255, 0.92)',
+              color: '#333',
+              cursor: 'pointer',
+              width: '40px',
+              height: '40px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 3px 12px rgba(0, 0, 0, 0.18)',
+              backdropFilter: 'blur(2px)',
+            }}
+          >
+            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
 
-        <div
-          ref={mountRef}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: '1px solid #e0e0e0',
-            borderRadius: isFullscreen ? '6px' : '8px',
-            overflow: 'hidden',
-          }}
-        />
+          {/* 📐 BOTÓN PARA VISTA 2D */}
+          <button
+            type="button"
+            onClick={() => {
+              setShow2DView(!show2DView);
+              setSvgContent(null); // Reset para forzar reload
+            }}
+            title={show2DView ? 'Ocultar vista 2D' : 'Ver plano 2D'}
+            aria-label={show2DView ? 'Ocultar vista 2D' : 'Ver plano 2D'}
+            style={{
+              position: 'absolute',
+              top: '12px',
+              left: '60px',
+              zIndex: 20,
+              border: '1px solid #d0d0d0',
+              borderRadius: '10px',
+              background: show2DView ? 'rgba(102, 126, 234, 0.92)' : 'rgba(255, 255, 255, 0.92)',
+              color: show2DView ? '#fff' : '#333',
+              cursor: 'pointer',
+              width: '40px',
+              height: '40px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 3px 12px rgba(0, 0, 0, 0.18)',
+              backdropFilter: 'blur(2px)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            {show2DView ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+
+          <div
+            ref={mountRef}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: '1px solid #e0e0e0',
+              borderRadius: isFullscreen ? '6px' : '8px',
+              overflow: 'hidden',
+            }}
+          />
+        </div>
+
+        {/* 📐 PANEL 2D SVG */}
+        {show2DView && (
+          <div
+            style={{
+              flex: '1',
+              width: '50%',
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              border: '1px solid #e0e0e0',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              backgroundColor: '#fff',
+              animation: 'slideIn 0.3s ease'
+            }}
+          >
+            <div
+              style={{
+                padding: '12px',
+                borderBottom: '1px solid #e0e0e0',
+                backgroundColor: '#f8f9fa',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#333' }}>
+                📐 Plano 2D
+              </h3>
+              <button
+                onClick={() => {
+                  setShow2DView(false);
+                  setSvgContent(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  color: '#666'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {isLoading2D ? (
+              <div
+                style={{
+                  flex: '1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#999'
+                }}
+              >
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ marginBottom: '10px' }}>⏳ Cargando plano 2D...</div>
+                  <div style={{ fontSize: '12px', color: '#bbb' }}>Generando vista del servidor</div>
+                </div>
+              </div>
+            ) : svgContent ? (
+              <div
+                style={{
+                  flex: '1',
+                  overflow: 'auto',
+                  padding: '12px'
+                }}
+              >
+                <div
+                  dangerouslySetInnerHTML={{ __html: svgContent }}
+                  style={{
+                    width: '100%',
+                    height: '100%'
+                  }}
+                />
+              </div>
+            ) : (
+              <div
+                style={{
+                  flex: '1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#999'
+                }}
+              >
+                <div style={{ textAlign: 'center', color: '#ccc' }}>
+                  <div style={{ fontSize: '24px', marginBottom: '10px' }}>📋</div>
+                  <div>No hay plano 2D disponible</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <style>{`
+          @keyframes slideIn {
+            from {
+              opacity: 0;
+              transform: translateX(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+        `}</style>
       </div>
     </div>
   );

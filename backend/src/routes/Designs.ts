@@ -10,7 +10,7 @@ import {
   getDesignTypes,
   getDesignMessages
 } from "../controllers/designs/DesignController";
-import { downloadFile } from "../controllers/files/DesignFileController";
+import { downloadFile, getSvg2DFile } from "../controllers/files/DesignFileController";
 import Message from "../database/models/Message.model";
 import Design from "../database/models/Design.model"; // 🔥 Import para bulk messages
 import MainAIService from '../services/ai/MainAIService';
@@ -273,6 +273,13 @@ router.get(
   "/api/files/download/:fileUuid",
   asyncHandler(verifyUser),
   asyncHandler(downloadFile)
+);
+
+// 📐 RUTA PARA OBTENER SVG 2D - VISUALIZACIÓN EN FRONTEND
+router.get(
+  "/designs/:designUuid/svg2d",
+  asyncHandler(verifyUser),
+  asyncHandler(getSvg2DFile)
 );
 
 router.post(

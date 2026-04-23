@@ -338,6 +338,109 @@ export const downloadFile = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * 📐 Obtener el archivo SVG 2D generado del plano
+ * Devuelve el contenido SVG para visualización en el frontend
+ */
+export const getSvg2DFile = async (req: Request, res: Response) => {
+  try {
+    const { designUuid } = req.params;
+    const userId = req.userId as string;
+
+    // Verificar que el diseño exista y pertenezca al usuario
+    const design = await Design.findOne({
+      where: { 
+        uuid: designUuid,
+        userId: userId,
+        status: { [Op.not]: 'deleted' }
+      }
+    });
+
+    if (!design) {
+      return res.status(404).json({
+        success: false,
+        message: "Diseño no encontrado o sin acceso",
+        action: 'check_design_access'
+      });
+    }
+
+    // Buscar el archivo SVG 2D
+    const svgFile = await DesignFile.findOne({
+      where: {
+        designId: designUuid,
+        fileType: 'svg',
+        status: 'ready'
+      },
+      order: [['createdAt', 'DESC']]
+    });
+
+    if (!svgFile) {
+      // Si no existe archivo SVG registrado, intentar encontrarlo en el sistema de archivos
+      const designFolder = path.join(process.cwd(), 'uploads', 'designs', designUuid);
+      const svgPattern = path.join(designFolder, '*plan_2d.svg');
+      
+      // Buscar cualquier archivo SVG en la carpeta
+      if (fs.existsSync(designFolder)) {
+        const files = fs.readdirSync(designFolder);
+        const svgFiles = files.filter(f => f.endsWith('.svg') && f.includes('plan_2d'));
+        
+        if (svgFiles.length > 0) {
+          const svgPath = path.join(designFolder, svgFiles[0]);
+          const svgContent = fs.readFileSync(svgPath, 'utf-8');
+          
+          return res.status(200).json({
+            success: true,
+            data: {
+              svg: svgContent,
+              filename: svgFiles[0],
+              designUuid: designUuid
+            },
+            action: 'svg_loaded'
+          });
+        }
+      }
+
+      return res.status(404).json({
+        success: false,
+        message: "Archivo SVG 2D no disponible",
+        action: 'generate_svg'
+      });
+    }
+
+    // Leer el archivo SVG del disco
+    const svgPath = svgFile.filePath;
+    
+    if (!fs.existsSync(svgPath)) {
+      return res.status(404).json({
+        success: false,
+        message: "Archivo SVG no encontrado en el sistema",
+        action: 'regenerate_svg'
+      });
+    }
+
+    const svgContent = fs.readFileSync(svgPath, 'utf-8');
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        svg: svgContent,
+        filename: svgFile.filename,
+        designUuid: designUuid,
+        createdAt: svgFile.createdAt
+      },
+      action: 'svg_loaded'
+    });
+
+  } catch (error) {
+    console.error("❌ Error obteniendo SVG 2D:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener el archivo SVG",
+      action: 'retry_later'
+    });
+  }
+};
+
 export const generateFile = async (req: Request, res: Response) => {
   try {
     const { designUuid } = req.params;
