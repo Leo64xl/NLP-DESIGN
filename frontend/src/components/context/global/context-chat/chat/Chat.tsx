@@ -2081,7 +2081,10 @@ const Chat: React.FC = () => {
                   </div>
                   <div className="chat-render-modal-body">
                     <div className="chat-render-modal-viewer-container">
-                      <PascalNativeViewer pascalData={renderModalData} />
+                      <PascalNativeViewer 
+                        pascalData={renderModalData}
+                        designUuid={designData?.uuid ?? designId ?? undefined}
+                      />
                     </div>
                   </div>
                 </div>

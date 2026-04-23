@@ -255,7 +255,10 @@ const DesignGenerator: React.FC<DesignGeneratorProps> = ({
         {activeTab === 'viewer' && (
           <div className="viewer-tab">
             {canShowViewer ? (
-              <PascalNativeViewer pascalData={pascalData} />
+              <PascalNativeViewer 
+                pascalData={pascalData}
+                designUuid={designData.uuid}
+              />
             ) : (
               <div className="viewer-placeholder">
                 <div className="placeholder-content">
