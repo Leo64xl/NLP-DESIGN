@@ -220,7 +220,7 @@ const ResetPasswordForm = () => {
     setIsSuccess(false)
     
     try {
-      const response = await axios.post<ResetPasswordResponse>('http://localhost:5000/reset-password', {
+      const response = await axios.post<ResetPasswordResponse>('http://localhost:8081/reset-password', {
         token,
         newPassword,
         confirmPassword

@@ -52,7 +52,7 @@ export async function sendPasswordResetEmail(
     username: string,
     userIP: string
 ) {
-    const resetUrl = `http://localhost:5000/reset-password?token=${token}`;
+    const resetUrl = `http://localhost:${process.env.PORT}/reset-password?token=${token}`;
     const location = await getLocationFromIP(userIP);
     const requestDate = formatDate();
     

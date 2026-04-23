@@ -224,7 +224,7 @@ const ResendVerified = () => {
     setIsAlreadyVerified(false)
     
     try {
-      const response = await axios.post<ResendSuccessResponse>('http://localhost:5000/resend-verification', {
+      const response = await axios.post<ResendSuccessResponse>('http://localhost:8081/resend-verification', {
         email: email.toLowerCase()
       })
       

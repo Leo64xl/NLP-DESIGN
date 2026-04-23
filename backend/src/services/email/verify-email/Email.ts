@@ -52,7 +52,7 @@ export async function sendVerificationEmail(
     username: string,
     userIP: string
 ) {
-    const verificationUrl = `http://localhost:5000/verify-email?token=${token}`;
+    const verificationUrl = `http://localhost:${process.env.PORT}/verify-email?token=${token}`;
     const location = await getLocationFromIP(userIP);
     const registrationDate = formatDate();
     

@@ -252,7 +252,7 @@ const ForgotPassword = () => {
     setIsSuccess(false)
     
     try {
-      const response = await axios.post<ForgotPasswordResponse>('http://localhost:5000/forgot-password', {
+      const response = await axios.post<ForgotPasswordResponse>('http://localhost:8081/forgot-password', {
         email: email.toLowerCase()
       })
       

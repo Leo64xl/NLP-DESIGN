@@ -79,7 +79,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     try {
       // 🎯 USAR LA API REAL AHORA
       const response = await axios.get<ApiResponse<NotificationsResponse>>(
-        'http://localhost:5000/notifications',
+        'http://localhost:8081/notifications',
         { withCredentials: true }
       );
       
@@ -173,7 +173,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
       
       // 🎯 LLAMAR A LA API REAL PARA MARCAR COMO LEÍDAS
       const response = await axios.patch<ApiResponse>(
-        'http://localhost:5000/notifications/read',
+        'http://localhost:8081/notifications/read',
         { notificationIds },
         { withCredentials: true }
       );

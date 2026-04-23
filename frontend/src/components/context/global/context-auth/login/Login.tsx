@@ -135,7 +135,7 @@ const Login: React.FC = () => {
     setIsLocalLoading(true);
     
     try {
-      const response = await axios.post('http://localhost:5000/login', {
+      const response = await axios.post('http://localhost:8081/login', {
         email: email,
         password: password
       });
@@ -184,7 +184,7 @@ const Login: React.FC = () => {
         setLocalError(msg || 'Error de verificación');
         
       } else if (error.response?.status === 404) {
-        setLocalError('Credenciales incorrectas');
+        setLocalError(error.response.data.msg);
 
       } else if (error.response?.status === 429) {
         showWarningAlert(

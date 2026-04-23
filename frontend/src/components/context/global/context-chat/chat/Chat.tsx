@@ -457,7 +457,7 @@ const Chat: React.FC = () => {
       console.log("🔍 Iniciando carga de tipos de diseño...");
 
       const response = await axios.get<ApiResponse<DesignTypesResponse>>(
-        "http://localhost:5000/design-types",
+        "http://localhost:8081/design-types",
         {
           withCredentials: true,
           timeout: 10000,
@@ -528,7 +528,7 @@ const Chat: React.FC = () => {
   const loadExistingDesign = async (designUuid: string) => {
     try {
       const response = await axios.get<ApiResponse<MessagesResponse>>(
-        `http://localhost:5000/designs/${designUuid}/messages`,
+        `http://localhost:8081/designs/${designUuid}/messages`,
         { withCredentials: true }
       );
 
@@ -586,7 +586,7 @@ const Chat: React.FC = () => {
 
       try {
         const designResponse = await axios.get<ApiResponse<GetDesignData>>(
-          `http://localhost:5000/designs/${designUuid}`,
+          `http://localhost:8081/designs/${designUuid}`,
           { withCredentials: true }
         );
 
@@ -643,7 +643,7 @@ const Chat: React.FC = () => {
       console.log(`💾 Guardando ${messagesToSave.length} mensajes en backend para diseño ${designUuid}`);
 
       await axios.post(
-        `http://localhost:5000/designs/${designUuid}/messages/bulk`,
+        `http://localhost:8081/designs/${designUuid}/messages/bulk`,
         { messages: messagesToSave },
         { withCredentials: true }
       );
@@ -730,7 +730,7 @@ const Chat: React.FC = () => {
           console.log("🚀 Enviando datos al backend:", promptData);
 
           const createResponse = await axios.post<ApiResponse<CreateDesignData>>(
-            "http://localhost:5000/designs",
+            "http://localhost:8081/designs",
             promptData,
             {
               withCredentials: true,
@@ -884,7 +884,7 @@ const Chat: React.FC = () => {
       if (targetDesignId && hasStarted) {
         try {
           await axios.post<ApiResponse<MessageData>>(
-            `http://localhost:5000/designs/${targetDesignId}/messages`,
+            `http://localhost:8081/designs/${targetDesignId}/messages`,
             {
               content: messageToSend,
               role: "user",
@@ -1029,7 +1029,7 @@ const Chat: React.FC = () => {
 
     try {
       const response = await axios.post<ApiResponse<ConvertResponse>>(
-        `http://localhost:5000/designs/${designData.uuid}/convert`,
+        `http://localhost:8081/designs/${designData.uuid}/convert`,
         {
           fromFormat,
           toFormat,
@@ -1097,7 +1097,7 @@ const Chat: React.FC = () => {
       try {
         // 1. Verificar mensajes nuevos
         const messagesResponse = await axios.get<ApiResponse<MessagesResponse>>(
-          `http://localhost:5000/designs/${designUuid}/messages`,
+          `http://localhost:8081/designs/${designUuid}/messages`,
           {
             withCredentials: true,
             timeout: 8000,
@@ -1158,7 +1158,7 @@ const Chat: React.FC = () => {
 
         // 2. Verificar estado del diseño
         const designResponse = await axios.get<ApiResponse<GetDesignData>>(
-          `http://localhost:5000/designs/${designUuid}`,
+          `http://localhost:8081/designs/${designUuid}`,
           {
             withCredentials: true,
             timeout: 8000,
@@ -1487,7 +1487,7 @@ const Chat: React.FC = () => {
       // Construir URL completa si es necesario
       const fullUrl = downloadUrl.startsWith('http') 
         ? downloadUrl 
-        : `http://localhost:5000${downloadUrl}`;
+        : `http://localhost:8081${downloadUrl}`;
 
       // Usar fetch para descargar con credenciales
       const response = await fetch(fullUrl, {
@@ -1544,7 +1544,7 @@ const Chat: React.FC = () => {
       try {
         const fullUrl = downloadUrl.startsWith('http') 
           ? downloadUrl 
-          : `http://localhost:5000${downloadUrl}`;
+          : `http://localhost:8081${downloadUrl}`;
         window.open(fullUrl, '_blank');
       } catch (fallbackError) {
         console.error('❌ Error en fallback:', fallbackError);
@@ -1601,7 +1601,7 @@ const Chat: React.FC = () => {
 
     try {
       const response = await axios.post<ApiResponse<any>>(
-        `http://localhost:5000/chat/design/${designId}/nlp-files`,
+        `http://localhost:8081/chat/design/${designId}/nlp-files`,
         {
           content: messageToSend,
           generateFiles: true

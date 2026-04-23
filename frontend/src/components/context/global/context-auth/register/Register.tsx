@@ -121,7 +121,7 @@ const Register = () => {
     setIsLoading(true)
     
     try {
-      await axios.post('http://localhost:5000/users', {
+      await axios.post('http://localhost:8081/users', {
         username,
         email,
         password,

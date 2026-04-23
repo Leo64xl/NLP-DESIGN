@@ -26,9 +26,11 @@ const store = new sessionStore({
     db: db,
 });
 
-//(async() => {
-//   await db.sync();
-//}) (); 
+(async() => {
+   // Las tablas se crean automáticamente con init.sql en Docker
+   // db.sync() ya no es necesario
+   // await db.sync();
+}) ();
 
 app.set('trust proxy', true);
 
@@ -61,7 +63,7 @@ app.use(Chat);
 app.use(Users);
 app.use(Admin);
 
-//store.sync();
+store.sync();
 
 // 🕐 CONFIGURAR TIMEOUTS LARGOS PARA PROCESAMIENTO DE IA
 const server = app.listen(process.env.APP_PORT || PORT, () => {

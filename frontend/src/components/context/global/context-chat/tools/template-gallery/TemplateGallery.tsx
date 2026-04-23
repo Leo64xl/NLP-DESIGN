@@ -55,7 +55,7 @@ const TemplateGallery: React.FC<TemplateGalleryProps> = ({
     try {
       const endpoint = showPopularOnly ? '/templates/popular' : '/templates';
       const response = await axios.get<ApiResponse<TemplatesResponse>>(
-        `http://localhost:5000${endpoint}`
+        `http://localhost:8081${endpoint}`
       );
       
       // 🎯 VALIDACIÓN TIPADA SEGURA
@@ -85,7 +85,7 @@ const TemplateGallery: React.FC<TemplateGalleryProps> = ({
       // Iniciar generación desde template
       try {
         const response = await axios.post<ApiResponse<GenerateResponse>>(
-          `http://localhost:5000/templates/${template.id}/generate`,
+          `http://localhost:8081/templates/${template.id}/generate`,
           { customizations: {} },
           { withCredentials: true }
         );

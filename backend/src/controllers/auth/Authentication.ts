@@ -14,13 +14,13 @@ export const Login = async (req: Request, res: Response) => {
     });
 
     if(!user) {
-        return res.status(404).json({msg: "Credenciales incorrectas"});
+        return res.status(404).json({msg: "¿Aún no tienes una cuenta? Regístrate para iniciar sesión"});
     }
 
     const match = await argon2.verify(user.password, req.body.password);
 
     if(!match) {
-        return res.status(404).json({ msg: "Credenciales incorrectas" });
+        return res.status(404).json({ msg: "La contraseña ingresada es incorrecta" });
     }
 
     if (user.verified !== 'true') {

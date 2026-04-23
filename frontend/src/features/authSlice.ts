@@ -33,7 +33,7 @@ export const LoginUser = createAsyncThunk<User, LoginPayload, { rejectValue: str
   "user/loginUser",
   async (user, thunkAPI) => {
     try {
-      const response = await axios.post<User>('http://localhost:5000/login', {
+      const response = await axios.post<User>('http://localhost:8081/login', {
         email: user.email,
         password: user.password
       }, {
@@ -54,7 +54,7 @@ export const getMe = createAsyncThunk<User, void, { rejectValue: string }>(
   "user/getMe",
   async (_, thunkAPI) => {
     try {
-      const response = await axios.get<User>('http://localhost:5000/me', {
+      const response = await axios.get<User>('http://localhost:8081/me', {
         withCredentials: true
       });
       return response.data;
@@ -72,7 +72,7 @@ export const LogOut = createAsyncThunk<void, void, { rejectValue: string }>(
   "user/LogOut",
   async (_, thunkAPI) => {
     try {
-      await axios.delete('http://localhost:5000/logout', {
+      await axios.delete('http://localhost:8081/logout', {
         withCredentials: true
       });
     } catch (error: any) {
